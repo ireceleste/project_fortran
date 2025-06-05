@@ -1,0 +1,9 @@
+likelihood          2
+model               Gauss
+start_params        0.0 1.0 1000
+data_file           
+n_points            
+output_fit_results  output/fit_results.txt
+fit_summary_file    output/fit_summary.txt
+verbose             output/verbose_log.txt
+
