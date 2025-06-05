@@ -16,7 +16,7 @@ module InputOutput
                     n_points_flag
 
         integer :: likelihood, Npars, max_iter, n_points
-        real(dp), allocatable :: x_start(:)
+        real(dp), allocatable :: x_start(:), step(:)
 
     end type CardData
 
@@ -33,9 +33,9 @@ module InputOutput
             character(len=32)  :: tokens(10)
             integer :: num_tokens, i, pos1, pos2, len_line
             
-            integer :: iu, ios, nargs
+            integer :: iu = 10, ios, nargs
             logical :: exists
-            logical :: likeflg, modelflg, start_params_flag
+            logical :: likeflg, modelflg, start_params_flag, step_flag
 
 
             card%max_iter = 50000
@@ -98,7 +98,7 @@ module InputOutput
                 write(*, '(/,A)') "Input options:"
                 write(*, '(A)') "  likelihood              1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
                 write(*, '(A)') "  model                   Gauss, Exp, Linear, Quadratic"
-                write(10,'(A)') "  start_params            1.0 0.5 ! Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
+                write(*, '(A)') "  start_params            1.0 0.5 ! Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
                 write(*, '(A)') "  data_file               path/to/data.txt"
                 write(*, '(A)') "  n_points                10000 ! Max number of points to generate (if no data_file is provided)"
                 write(*, '(A)') "  output_fit_results      output/fit_results.txt"
@@ -123,22 +123,26 @@ module InputOutput
                     trim(line) == 'yes' .or. trim(line) == 'YES' .or. &
                     trim(line) == 'Yes') then
 
-                    open(unit=10, file='card.dat', status='replace', action='write')
-                    write(10,'(A)') "likelihood          2"
-                    write(10,'(A)') "model               Gauss"
-                    write(10,'(A)') "start_params        0.0 1.0 1000"
-                    write(10,'(A)') "data_file           "
-                    write(10,'(A)') "max_iter           50000"
-                    write(10,'(A)') "steps              1.0e-6 1.0e-6 10"
-                    write(10,'(A)') "output_fit_results  output/fit_results.txt"
-                    write(10,'(A)') "fit_summary_file    output/fit_summary.txt"
-                    write(10,'(A)') "verbose             output/verbose_log.txt"
 
-                    write(10,'(A)') ""
+                    open(unit=iu, file='card.dat', status='replace', action='write')
+                    write(iu,'(A)') "likelihood          2"
+                    write(iu,'(A)') "model               Gauss"
+                    write(iu,'(A)') "start_params        0.0 1.0 10000"
+                    write(iu,'(A)') "data_file            "
+                    write(iu,'(A)') "n_points             "
+                    write(iu,'(A)') "max_iter            50000"
+                    write(iu,'(A)') "step                1.0e-6 1.0e-6 10"
+                    write(iu,'(A)') "output_fit_results  output/fit_results.txt"
+                    write(iu,'(A)') "fit_summary_file    output/fit_summary.txt"
+                    write(iu,'(A)') "verbose             output/verbose_log.txt"
+
+                    write(iu,'(A)') ""
+                    close(iu)
+
+
                     write(*, '(/,A,/)') "Template input card written to 'card.dat'."
                     write(*, '(A)') "Now you can modify it according to your needs and run the program with:"
                     write(*, '(A)') "  > bin/main card.dat"
-                    close(10)
                 else
                     write(*, '(/,A,/)') "No file created. Proceed with your custom input card."
                 end if
@@ -335,6 +339,24 @@ module InputOutput
                     
                 end if ! End key == 'start_params'
 
+                if(tokens(1) == 'step') then
+
+                    if (num_tokens > 1) then
+                        allocate(card%step(num_tokens - 1))
+                        do i = 2, num_tokens
+                            read(tokens(i), *, iostat=ios) card%step(i - 1)
+                            if (ios /= 0) then
+                                write(*, '(/,A, i0)') "Input error: invalid value provided for 'step' - position ", i-1
+                                write(*, '(A)')   "Please provide valid numerical values."
+                                write(*, '(A,/)') "Aborting..."
+                                stop
+                            end if
+                            step_flag = .true.
+                        end do
+                    end if
+                    
+                end if ! End key == 'step'
+
                 if (tokens(1) == 'data_file') then
                     select case (num_tokens)
                     case (1)
@@ -431,6 +453,18 @@ module InputOutput
                     
                 end if ! End key == 'verbose'
 
+                if(tokens(1) == 'max_iter' .and. num_tokens == 2) then
+                    
+                    read(tokens(2), *, iostat=ios) card%max_iter
+                    if (ios /= 0 .or. card%max_iter <= 0) then
+                        write(*, '(/,A)') "Input error: invalid value provided for 'max_iter'."
+                        write(*, '(A)')   "Please provide a positive integer value."
+                        write(*, '(A,/)') "Aborting..."
+                        stop
+                    end if
+                                        
+                end if ! End key == 'max_iter'
+
 
             else
                 exit
@@ -487,9 +521,6 @@ module InputOutput
                 stop
             
             end if
-
-            
-            
             
         else
             write(*, '(/,A)') "No start parameters provided, using default values."
@@ -545,6 +576,25 @@ module InputOutput
             else
                 card%n_points = 50  ! Default number of points for unbinned data generation
             end if
+            
+        end if
+
+        ! Set the step if not provided in the input card
+
+        if (.not. step_flag) then
+            allocate(card%step(card%Npars))
+            card%step = 1.0e-6_dp  ! Default step size for all parameters
+
+            select case (card%model)
+            case ("Gauss")  ! Gauss
+                card%step(3) = 10.0_dp  ! yield step to ensure better convergence
+            case ("expo")  ! Exponential
+                card%step(2) = 10.0_dp  ! yield step to ensure better convergence
+            case ("linear")  ! Linear
+                ! No specific step size needed for linear model
+            case ("quadratic")  ! Quadratic
+                card%step(1) = 1.0e-9_dp  ! a step to ensure better convergence
+            end select
             
         end if
 
@@ -637,7 +687,7 @@ module InputOutput
         character(len=256) :: line
 
         real(dp), dimension(:), allocatable :: xvals, yvals, err_yvals
-        real(dp), dimension(:), allocatable ::  step, lrate
+        real(dp), dimension(:), allocatable :: lrate
         character(len=100), dimension(:), allocatable :: param_names
         character(len=100) :: hist_name
         type(Histogram) :: hist
@@ -645,25 +695,21 @@ module InputOutput
 
         ! Set step, learning rate, and parameter names based on the FCN index
 
-        allocate(step(card%Npars), lrate(card%Npars), param_names(card%Npars))
-        step = 1.0e-6_dp
+
+        allocate(lrate(card%Npars), param_names(card%Npars))
         
         select case (card%model)
         case ("Gauss")  
-            step(3) = 10.0_dp  ! yield step to ensure better convergence
             param_names(1) = "mean"
             param_names(2) = "stddev"
             param_names(3) = "yield"
         case ("expo")
-            step(2) = 10.0_dp  ! yield step to ensure better convergence
             param_names(1) = "lambda"
             param_names(2) = "yield"
         case ("linear") 
             param_names(1) = "slope"
             param_names(2) = "intercept"
         case ("quadratic")  
-            
-            step(1) = 1.0e-9_dp  ! a  step to ensure better convergence
             param_names(1) = "a"
             param_names(2) = "b"
             param_names(3) = "c"
@@ -672,7 +718,7 @@ module InputOutput
             stop
         end select
 
-        lrate = step
+        lrate = card%step  ! Use the step sizes as learning rates
 
 
         ! Read or generate data 
@@ -737,7 +783,7 @@ module InputOutput
             fitter_instance = init_Fitter(card%likelihood, card%model, card%Npars, &
                 card%x_start, param_names, &
                 hist=hist , &
-                max_iter=card%max_iter, step=step, lrate=lrate)
+                max_iter=card%max_iter, step=card%step, lrate=lrate)
 
         
         else ! Unbinned fit
@@ -780,7 +826,7 @@ module InputOutput
             fitter_instance = init_Fitter(card%likelihood, card%model, card%Npars, &
                 card%x_start, param_names, &
                 xvals = xvals, yvals=yvals, err_yvals=err_yvals, &
-                max_iter=card%max_iter, step=step, lrate=lrate)
+                max_iter=card%max_iter, step=card%step, lrate=lrate)
         end if
 
        

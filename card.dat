@@ -1,8 +1,10 @@
 likelihood          2
 model               Gauss
-start_params        0.0 1.0 1000
-data_file           
-n_points            
+start_params        0.0 1.0 10000
+data_file            
+n_points             
+max_iter            50000
+step                1.0e-6 1.0e-6 10
 output_fit_results  output/fit_results.txt
 fit_summary_file    output/fit_summary.txt
 verbose             output/verbose_log.txt

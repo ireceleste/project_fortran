@@ -4,12 +4,10 @@ SRCDIR = ./src
 MODDIR = ./mod
 OBJDIR = ./obj
 BINDIR = ./bin
+OUTDIR = ./output
 
-# VPATH specifies the directories to be searched for modules
 VPATH = $(SRCDIR)/modules
-# The wildcard function is used to generate a list of .f08 files in the modules directory
-# Collect all modules
-# List source files in correct compilation order
+
 MODULE_SRCS = \
     $(SRCDIR)/modules/utils.f08 \
 	$(SRCDIR)/modules/HistogramHandler.f08 \
@@ -34,9 +32,10 @@ main: $(OBJS) $(SRCDIR)/main.f08
 $(OBJDIR)/%.o: $(SRCDIR)/modules/%.f08
 	$(FC) $(FCFLAGS) -c $< -o $@
 
+
 # The directories target ensures that the necessary directories exist before building
 
-directories: $(BINDIR) $(MODDIR) $(OBJDIR)
+directories: $(BINDIR) $(MODDIR) $(OBJDIR) $(OUTDIR)
 
 $(BINDIR):
 	mkdir -p $(BINDIR)
@@ -47,7 +46,16 @@ $(MODDIR):
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
+${OUTDIR}:
+	mkdir -p $(OUTDIR)
+
 # The clean target removes all compiled files and directories
 .PHONY: clean
 clean: 
-	rm -f $(BINDIR)/* $(MODDIR)/*.mod $(OBJDIR)/*.o
+	rm -rf $(BINDIR)/* $(MODDIR)/*.mod $(OBJDIR)/*.o 
+	rmdir $(BINDIR) $(MODDIR) $(OBJDIR) 
+
+.PHONY: clean_output
+clean_output:
+	rm -f $(OUTDIR)/*
+	rmdir $(OUTDIR)
