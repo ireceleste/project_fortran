@@ -57,13 +57,10 @@ module InputOutput
 
             if (nargs == 0 .or. nargs >= 2) then
                 write(*, '(/,A,/,A,/)') "Wrong input!", "Usage of the Fitter project:"
-                write(*, '(A)') "  > make"
                 write(*, '(A)') "  > bin/main path/to/inputcard"
                 write(*, '(/,A,/)') "For help mode use:"
-                write(*, '(A)') "  > make"
                 write(*, '(A)') "  > bin/main -h  or  bin/main --help"
                 write(*, '(/,A,/)') "For more details on the available models use:"
-                write(*, '(A)') "  > make"
                 write(*, '(A)') "  > bin/main -m  or  bin/main --models"
                 write(*, '(/)')
                 stop
@@ -91,9 +88,10 @@ module InputOutput
                 write(*, '(/,A)') "======================= INPUT FORMAT ======================="
                 write(*, '(A)') "An input card must be provided as the first command-line argument:"
                 write(*, '(A)') "  > bin/main path/to/inputcard"
-                write(*, '(A)') "The input card is a two-column text file:"
+                write(*, '(A)') "The input card is a two-column text file, with optionally a divider (, | ;)"
                 write(*, '(A)') "  [key]    [value]"
                 write(*, '(A)') "Lines after the first empty line are ignored."
+                write(*, '(A)') "Lines starting with ! # / are ignored."
 
                 write(*, '(/,A)') "Input options:"
                 write(*, '(A)') "  likelihood              1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
@@ -125,16 +123,34 @@ module InputOutput
 
 
                     open(unit=iu, file='card.dat', status='replace', action='write')
-                    write(iu,'(A)') "likelihood          2"
-                    write(iu,'(A)') "model               Gauss"
-                    write(iu,'(A)') "start_params        0.0 1.0 10000"
-                    write(iu,'(A)') "data_file            "
-                    write(iu,'(A)') "n_points             "
-                    write(iu,'(A)') "max_iter            50000"
-                    write(iu,'(A)') "step                1.0e-6 1.0e-6 10"
-                    write(iu,'(A)') "output_fit_results  output/fit_results.txt"
-                    write(iu,'(A)') "fit_summary_file    output/fit_summary.txt"
-                    write(iu,'(A)') "verbose             output/verbose_log.txt"
+                    write(iu,'(A)') "/"
+                    write(iu,'(A)') "/"
+                    write(iu,'(A)') "######## Template input card for the Gradient Descent Fitter ########"
+                    write(iu,'(A)') "/"
+                    write(iu,'(A)') "/"                    
+                    write(iu,'(A)') "# likelihood: 1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
+                    write(iu,'(A)') "# model: Gauss, Exp, Linear, Quadratic"
+                    write(iu,'(A)') "# start_params: Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
+                    write(iu,'(A)') "# data_file: Path to the input data file (if not provided, synthetic data will be generated)"
+                    write(iu,'(A)') "# n_points: Max number of points to generate (if no data_file is provided). Overwrites the yield parameter if provided in start_params."
+                    write(iu,'(A)') "# max_iter: Maximum number of iterations for the gradient descent algorithm"
+                    write(iu,'(A)') "# step: Step size for each parameter (default is 1.0e-6 for all parameters)"
+                    write(iu,'(A)') "# output_fit_results: Path to save the fit results and input data for plotting"
+                    write(iu,'(A)') "# fit_summary_file: Path to save the fit summary"
+                    write(iu,'(A)') "# verbose: Path to save the verbose log with all the minimization steps"
+                    write(iu,'(A)') "/"
+                    write(iu,'(A)') "/"
+
+                    write(iu,'(A)') "likelihood          |      2"
+                    write(iu,'(A)') "model               |      Gauss"
+                    write(iu,'(A)') "start_params        |      0.0 1.0 10000"
+                    write(iu,'(A)') "data_file           |       "
+                    write(iu,'(A)') "n_points            |       "
+                    write(iu,'(A)') "max_iter            |      50000"
+                    write(iu,'(A)') "step                |      1.0e-6 1.0e-6 10"
+                    write(iu,'(A)') "output_fit_results  |      output/fit_results.txt"
+                    write(iu,'(A)') "fit_summary_file    |      output/fit_summary.txt"
+                    write(iu,'(A)') "verbose             |      output/verbose_log.txt"
 
                     write(iu,'(A)') ""
                     close(iu)
@@ -204,14 +220,20 @@ module InputOutput
         do
             read(iu, '(a)', iostat=ios) line
 
-            if (ios == 0) then
-                
+            if (ios == 0 ) then
+
                 ! --- Read the line and save the key-value pairs ---
                 
                 tokens = ""
                 num_tokens = 0
                 len_line = len_trim(line)
                 pos1 = 1
+
+                if(len_line > 0 .and. (line(pos1:pos1) == '#' .or. line(pos1:pos1) == '!' .or. line(pos1:pos1) == '/')) then
+                    ! Skip comment lines
+                    write(*, '(A,1X,A)') "Skipping comment line:", trim(line)
+                    cycle
+                end if
 
                 do while (pos1 <= len_line .and. num_tokens < 10)
 
@@ -227,8 +249,10 @@ module InputOutput
                         pos2 = pos2 + 1
                     end do
 
-                    num_tokens = num_tokens + 1
-                    tokens(num_tokens) = line(pos1:pos2-1)
+                    if(line(pos1:pos2-1) /= ',' .and. line(pos1:pos2-1) /= ';' .and. line(pos1:pos2-1) /= '|') then
+                        num_tokens = num_tokens + 1
+                        tokens(num_tokens) = line(pos1:pos2-1)
+                    end if
 
                     pos1 = pos2
                 end do
@@ -281,14 +305,12 @@ module InputOutput
                     if (num_tokens < 2) then
                         write(*, '(/,A)') "Input error: 'model' option requires a value."
                         write(*, '(A)')   "For more details on available models use:"
-                        write(*, '(A)')   "  > make"
                         write(*, '(A)')   "  > bin/main -m  or  bin/main --models"
                         write(*, '(A,/)') "Aborting..."
                         stop
                     else if (num_tokens > 2) then
                         write(*, '(/,A)') "Input error: too many values provided for 'model'."
                         write(*, '(A)')   "For more details on available models use:"
-                        write(*, '(A)')   "  > make"
                         write(*, '(A)')   "  > bin/main -m  or  bin/main --models"
                         write(*, '(A,/)') "Aborting..."
                         stop
@@ -313,7 +335,6 @@ module InputOutput
                     else
                         write(*, '(/,A)') "Input error: this model is not available."
                         write(*, '(A)')   "For more details on available models use:"
-                        write(*, '(A)')   "  > make"
                         write(*, '(A)')   "  > bin/main -m  or  bin/main --models"
                         write(*, '(A,/)') "Aborting..."
                         stop
@@ -626,7 +647,7 @@ module InputOutput
         if(start_params_flag) then
             write(*, '("  Start parameters:       [")', advance='no')
             do i = 1, size(card%x_start)
-                write(*, '(F8.3)', advance='no') card%x_start(i)
+                write(*, '(F10.3)', advance='no') card%x_start(i)
                 if (i < size(card%x_start)) write(*, '(" ")', advance='no')
             end do
             write(*, '("]")')
@@ -634,7 +655,7 @@ module InputOutput
             write(*, '(A)') "  Start parameters:       [not set] -> will use default values:"
             write(*, '("                          [")', advance='no')
             do i = 1, size(card%x_start)
-                write(*, '(F8.3)', advance='no') card%x_start(i)
+                write(*, '(F10.3)', advance='no') card%x_start(i)
                 if (i < size(card%x_start)) write(*, '(" ")', advance='no')
             end do
             write(*, '("]")')

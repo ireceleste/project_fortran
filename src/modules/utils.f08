@@ -77,7 +77,7 @@ module utils
             allocate(ipiv(n))
 
             ! First, perform LU decomposition
-            call dgetrf(n, n, Ainv, n, ipiv, info)
+            call dgetrf(n, n, Ainv, n, ipiv, info) ! Fare interfaccia!! 
 
             if (info /= 0) then
                 print*, "################### Error in LU decomposition ###################"

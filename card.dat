@@ -1,11 +1,28 @@
-likelihood          2
-model               Gauss
-start_params        0.0 1.0 10000
-data_file            
-n_points             
-max_iter            50000
-step                1.0e-6 1.0e-6 10
-output_fit_results  output/fit_results.txt
-fit_summary_file    output/fit_summary.txt
-verbose             output/verbose_log.txt
+/
+/
+######## Template input card for the Gradient Descent Fitter ########
+/
+/
+# likelihood: 1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)
+# model: Gauss, Exp, Linear, Quadratic
+# start_params: Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))
+# data_file: Path to the input data file (if not provided, synthetic data will be generated)
+# n_points: Max number of points to generate (if no data_file is provided). Overwrites the yield parameter if provided in start_params.
+# max_iter: Maximum number of iterations for the gradient descent algorithm
+# step: Step size for each parameter (default is 1.0e-6 for all parameters)
+# output_fit_results: Path to save the fit results and input data for plotting
+# fit_summary_file: Path to save the fit summary
+# verbose: Path to save the verbose log with all the minimization steps
+/
+/
+likelihood          |      2
+model               |      Gauss
+start_params        |      0.0 1.0 10000
+data_file           |       
+n_points            |       
+max_iter            |      50000
+step                |      1.0e-6 1.0e-6 10
+output_fit_results  |      output/fit_results.txt
+fit_summary_file    |      output/fit_summary.txt
+verbose             |      output/verbose_log.txt
 
