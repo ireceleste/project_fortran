@@ -11,9 +11,9 @@ module InputOutput
 
     type CardData
 
-        character(len=100) :: data_file, output_fit_summary, output_fit_results, verbose_log, model
+        character(len=100) :: data_file, output_fit_summary, output_fit_results, verbose_log, save_gen_data, model
         logical :: binned, input_data_flag, output_fit_summary_flag, output_fit_results_flag, verbose_flag, &
-                    n_points_flag
+                    n_points_flag, save_gen_data_flag
 
         integer :: likelihood, Npars, max_iter, n_points
         real(dp), allocatable :: x_start(:), step(:)
@@ -138,6 +138,7 @@ module InputOutput
                     write(iu,'(A)') "# output_fit_results: Path to save the fit results and input data for plotting"
                     write(iu,'(A)') "# fit_summary_file: Path to save the fit summary"
                     write(iu,'(A)') "# verbose: Path to save the verbose log with all the minimization steps"
+                    write(iu,'(A)') "# save_gen_data: Path to save the generated data (if applicable)"
                     write(iu,'(A)') "/"
                     write(iu,'(A)') "/"
 
@@ -151,6 +152,7 @@ module InputOutput
                     write(iu,'(A)') "output_fit_results  |      output/fit_results.txt"
                     write(iu,'(A)') "fit_summary_file    |      output/fit_summary.txt"
                     write(iu,'(A)') "verbose             |      output/verbose_log.txt"
+                    write(iu,'(A)') "save_gen_data       |      output/save_gen_data.txt"
 
                     write(iu,'(A)') ""
                     close(iu)
@@ -474,6 +476,25 @@ module InputOutput
                     
                 end if ! End key == 'verbose'
 
+                if (tokens(1) == 'save_gen_data') then
+                    select case (num_tokens)
+                    case (1)
+                        card%save_gen_data_flag = .false.
+                    case(2)
+                        card%save_gen_data_flag = .true.
+                        card%save_gen_data = trim(tokens(2))
+                    case default
+
+                        write(*, '(/,A)') "Input error: invalid value provided for 'save_gen_data'."
+                        write(*, '(A)')   "Please provide a valid path to the data file."
+                        write(*, '(A,/)') "Aborting..."
+                        stop
+                
+                    end select
+                    
+                end if ! End key == 'save_gen_data'
+
+
                 if(tokens(1) == 'max_iter' .and. num_tokens == 2) then
                     
                     read(tokens(2), *, iostat=ios) card%max_iter
@@ -691,6 +712,13 @@ module InputOutput
             write(*, '(A)') "  Verbose log file:       [not set] -> will not save verbose log"
         end if
 
+        if (card%save_gen_data_flag .and. .not. card%input_data_flag ) then
+            write(*, '(A,1X,A)') "  Save generated data:   ", trim(card%save_gen_data)
+
+        else if(.not.  card%save_gen_data_flag .and. .not. card%input_data_flag ) then
+            write(*, '(A)') "  Save generated data:    [not set] -> will not save generated data"
+        end if
+
         write(*, '(/,A,/)') repeat('=', 90)
 
 
@@ -713,6 +741,7 @@ module InputOutput
         character(len=100) :: hist_name
         type(Histogram) :: hist
         logical :: exists
+        real :: dummy
 
         ! Set step, learning rate, and parameter names based on the FCN index
 
@@ -747,7 +776,7 @@ module InputOutput
         if(card%binned) then
 
             if(card%input_data_flag) then
-            
+
 
                 inquire(file=card%data_file, exist=exists)
                 if (.not. exists) then
@@ -762,13 +791,27 @@ module InputOutput
                     stop
                 end if
                 
-                n = 0
+               n = 0
                 do
-                    read(iu, *, iostat=ios) xvals(i)
+                    read(iu, *, iostat=ios) dummy
                     if (ios /= 0) exit
                     n = n + 1
                 end do
-                write(*, '(A,I0)') "Read ", n, " data points from file '", trim(card%data_file), "'."
+
+                allocate(xvals(n))
+
+                rewind(iu)
+                do i = 1, n
+                    read(iu, *, iostat=ios) xvals(i)
+                    if (ios /= 0) then
+                        print *, "Read error at entry", i
+                        stop
+                    end if
+                end do
+                close(iu)
+
+
+                write(*, '("Read ",I0, " data points from file " ,A)')  n, trim(card%data_file)
                 hist_name = "Histogram of " // trim(card%data_file) // " data"
                 
             else
@@ -777,6 +820,17 @@ module InputOutput
                 call generate_dataset_pdf(n, xvals, pdf = card%model, pars = card%x_start(1:card%Npars-1)) 
 
                 hist_name = "Histogram of generated " // trim(card%model) // " data"
+
+                if(card%save_gen_data_flag) then
+                    
+                    open(newunit=iu, file=card%save_gen_data, action='write', status='replace')
+                    do i = 1, n
+                        write(iu, '(F10.3)') xvals(i)
+                    end do
+                    close(iu)
+                    write(*, '(A)') "Generated data saved to '", trim(card%save_gen_data), "'."
+                end if
+
 
             end if
 
@@ -824,11 +878,24 @@ module InputOutput
                 
                 n = 0
                 do
-                    read(iu, *, iostat=ios) xvals(n), yvals(n), err_yvals(n)
+                    read(iu, *, iostat=ios) dummy
                     if (ios /= 0) exit
                     n = n + 1
                 end do
-                write(*, '(A,I0)') "Read ", n, " data points from file '", trim(card%data_file), "'."
+
+                allocate(xvals(n), yvals(n), err_yvals(n))
+
+                rewind(iu)
+                do i = 1, n
+                    read(iu, *, iostat=ios) xvals(i), yvals(i), err_yvals(i)
+                    if (ios /= 0) then
+                        print *, "Read error at entry", i
+                        stop
+                    end if
+                end do
+                close(iu)
+
+                write(*, '("Read ",I0, " data points from file " ,A)')  n, trim(card%data_file)
                 
             else
                 n = card%n_points
@@ -842,6 +909,17 @@ module InputOutput
         
                 call generate_dataset_model(n, yvals, card%x_start, model = card%model, &
                      xvals = xvals, yerrs = err_yvals)
+                
+                if(card%save_gen_data_flag) then
+                    
+                    open(newunit=iu, file=card%save_gen_data, action='write', status='replace')
+                    do i = 1, n
+                        write(iu, '(F10.3, F10.3, F10.3)') xvals(i), yvals(i), err_yvals(i)
+                    end do
+                    close(iu)
+                    write(*, '(A)') "Generated data saved to '", trim(card%save_gen_data), "'."
+                end if
+
             end if
 
             fitter_instance = init_Fitter(card%likelihood, card%model, card%Npars, &

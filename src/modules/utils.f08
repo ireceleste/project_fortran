@@ -3,6 +3,14 @@ module utils
     real(dp) :: pi = 4.0_dp * atan(1.0_dp)
     real(dp) :: e = exp(1.0_dp)
     
+    interface xgetrf
+        module procedure dgetrf_interface
+    end interface
+
+    interface xgetri
+        module procedure dgetri_interface
+    end interface
+
     contains    
 
         ! Subroutine to append an element to an allocatable array
@@ -57,7 +65,28 @@ module utils
 
         end function closeto
 
-        
+        ! Interface wrapper for DGETRF 
+        subroutine dgetrf_interface(m, n, a, lda, ipiv, info)
+            integer, intent(in) :: m, n, lda
+            integer, intent(out) :: ipiv(*)
+            integer, intent(out) :: info
+            real(dp), intent(inout) :: a(lda, *)
+            external :: dgetrf
+            call dgetrf(m, n, a, lda, ipiv, info)
+        end subroutine dgetrf_interface
+
+        ! Interface wrapper for DGETRI 
+        subroutine dgetri_interface(n, a, lda, ipiv, work, lwork, info)
+            integer, intent(in) :: n, lda, lwork
+            integer, intent(in) :: ipiv(*)
+            integer, intent(out) :: info
+            real(dp), intent(inout) :: a(lda, *)
+            real(dp), intent(inout) :: work(*)
+            external :: dgetri
+            call dgetri(n, a, lda, ipiv, work, lwork, info)
+        end subroutine dgetri_interface
+
+
         ! Procedure to invert a matrix using LAPACK's dgetrf and dgetri routines
         
         subroutine invert_matrix(A, Ainv)
@@ -77,7 +106,7 @@ module utils
             allocate(ipiv(n))
 
             ! First, perform LU decomposition
-            call dgetrf(n, n, Ainv, n, ipiv, info) ! Fare interfaccia!! 
+            call xgetrf(n, n, Ainv, n, ipiv, info) 
 
             if (info /= 0) then
                 print*, "################### Error in LU decomposition ###################"
@@ -89,7 +118,7 @@ module utils
 
             lwork = -1
             allocate(work(1))
-            call dgetri(n, Ainv, n, ipiv, work, lwork, info)
+            call xgetri(n, Ainv, n, ipiv, work, lwork, info)
             lwork = int(work(1))  
             deallocate(work)
             allocate(work(lwork))
