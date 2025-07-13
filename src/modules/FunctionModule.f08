@@ -1,3 +1,7 @@
+!!!!!!!!!!!!!!!!!!!!!!!! FunctionModule.f08 !!!!!!!!!!!!!!!!!!!!!!!!!!
+! This module contains functions for calculating the fit quality (chi^2 or likelihood)
+! Called by the Minimizer module
+
 module FunctionModule
     use utils
     use Minimizer
@@ -17,11 +21,11 @@ contains
                 
             case(1)  ! Unbinned Fit
                 if(fitter_instance%save_pdf) then
-                    val = chi2binnedFCN(fitter_instance%model, fitter_instance%yvals, fitter_instance%err_yvals, &
+                    val = chi2unbinnedFCN(fitter_instance%model, fitter_instance%yvals, fitter_instance%err_yvals, &
                                             fitter_instance%xvals, fitter_instance%p_min, &
                                             fitter_instance%pdf_vals)
                 else
-                    val = chi2binnedFCN(fitter_instance%model, fitter_instance%yvals, fitter_instance%err_yvals, &
+                    val = chi2unbinnedFCN(fitter_instance%model, fitter_instance%yvals, fitter_instance%err_yvals, &
                                             fitter_instance%xvals, fitter_instance%p_min)
                 end if
             
@@ -81,30 +85,33 @@ contains
 
         do i = 1, hist%nbins
 
-            if (hist%bin_errors(i)  > 0.0_dp) then  
+            if(model == 'Gauss') then
+                prediction = pars(3) * hist%bin_widths(i) * gaussian1D(hist%bin_centers(i), pars(1), pars(2))
+            else if(model == 'expo') then
+                prediction = pars(2) * hist%bin_widths(i) * exponential1D(hist%bin_centers(i), pars(1))
+            else
+                print *, "Error: Invalid binned model type: ", model
+                val = HUGE(1.0_dp)
+                return
+            end if
             
-                if(model == 'Gauss') then
-                    prediction = pars(3) * hist%bin_widths(i) * gaussian1D(hist%bin_centers(i), pars(1), pars(2))
-                else if(model == 'expo') then
-                    prediction = pars(2) * hist%bin_widths(i) * exponential1D(hist%bin_centers(i), pars(1))
-                else
-                    print *, "Error: Invalid binned model type: ", model
-                    return
-                end if
-                
-                if (present(predictions)) then
-                    predictions(i) = prediction
-                end if
+            
+            if (present(predictions))  predictions(i) = prediction ! Save predictions if requested
 
-                if(likelihood == 2) then 
-                    if(prediction > 0) val = val + 2.0_dp * (prediction - hist%bin_counts(i) + hist%bin_counts(i) * log(hist%bin_counts(i) / prediction))
+            if (hist%bin_errors(i)  > 0.0_dp) then
 
-                else if(likelihood == 3) then 
-                    if(hist%bin_errors(i) > 0) val = val + ((hist%bin_counts(i) - prediction) / hist%bin_errors(i))**2
-                else
+                select case (likelihood)
+                case(2)  ! Poisson likelihood
+                    if(prediction > 0 .and. hist%bin_counts(i) > 0) then
+                        val = val + 2.0_dp * (prediction - hist%bin_counts(i) + hist%bin_counts(i) * log(hist%bin_counts(i) / prediction))
+                    end if
+                case(3)  ! Chi-squared likelihood
+                    val = val + ((hist%bin_counts(i) - prediction) / hist%bin_errors(i))**2
+                case default
                     print *, "Error: Invalid likelihood type in histbinnedFCN."
+                    val = HUGE(1.0_dp)
                     return
-                end if
+                end select
             end if
         end do
         
@@ -113,9 +120,9 @@ contains
 
 
 
-    ! Function to calculate the chi-squared value for a linear model fit to a dataset
+    ! Function to calculate the chi-squared value for a linear/quadratic model fit to a dataset
 
-    function chi2binnedFCN(model, yvals, err_yvals, xvals, pars, predictions) result(val)
+    function chi2unbinnedFCN(model, yvals, err_yvals, xvals, pars, predictions) result(val)
         character(len=*), intent(in) :: model
         real(dp), intent(in) :: yvals(:), err_yvals(:), xvals(:), pars(:)
         real(dp), dimension(:), intent(inout), optional :: predictions
@@ -133,21 +140,18 @@ contains
                 prediction = pars(1) * xvals(i)**2 + pars(2) * xvals(i) + pars(3)
             else
                 print *, "Error: Invalid binned model type: ", model
+                val = HUGE(1.0_dp)
                 return
             end if
 
-            if (present(predictions)) then
-                predictions(i) = prediction
-            end if
+            if (present(predictions))  predictions(i) = prediction ! Save predictions if requested
+            
+            if (err_yvals(i) > 0.0_dp)  val = val + ((yvals(i) - prediction) / err_yvals(i))**2
 
-            if (err_yvals(i) > 0.0_dp) then  
-                val = val + ((yvals(i) - prediction) / err_yvals(i))**2
-            end if
         end do
         
-    end function chi2binnedFCN
+    end function chi2unbinnedFCN
 
-    ! Function to calculate the chi-squared value for a quadratic model fit to a dataset
 
     
 
