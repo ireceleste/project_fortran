@@ -1,3 +1,10 @@
+!!!!!!!!!!!!!!!!!!!!!!!!! GaussianGenerator.f08 !!!!!!!!!!!!!!!!!!!!!!!!!!
+! This module contains subroutines for generating Gaussian distributions and datasets with a fixed pdf
+  ! generate_gaussian: generates a Gaussian distribution using the Box-Muller transform
+  ! generate_dataset_pdf: generates a dataset based on a given pdf using Monte Carlo acceptance-rejection (exponential or Gaussian)
+  ! generate_dataset_model: generates a dataset based on a given model with Gaussian noise
+! Called by the InputOutput module
+
 module GaussianGenerator
     use utils
     implicit none
@@ -17,16 +24,12 @@ contains
     integer, allocatable :: seed(:)
     integer :: seed_size
 
-
-    ! Fix the seed
+    if (sigma <= 0.0_dp) then
+      write(*,*) "Error: Standard deviation sigma must be positive."
+      stop
+    end if    
     
-    call random_seed(size=seed_size)
-    allocate(seed(seed_size))
-    seed = 12349
-    call random_seed(put=seed)
-    ! call random_seed()
-
-    
+    call random_seed()
 
     i = 1
     do while (i <= n)
@@ -51,7 +54,8 @@ contains
   end subroutine generate_gaussian
 
 
-  ! This subroutine generates a dataset based on a given pdf
+  ! This subroutine generates a dataset based on a given pdf based on the Monte Carlo
+  ! acceptance-rejection sampling
 
   subroutine generate_dataset_pdf(n, output_yvals, pdf , pars)
     implicit none
@@ -61,23 +65,14 @@ contains
     real(dp), intent(in) :: pars(:)
     real(dp), dimension(n), intent(out) :: output_yvals
 
-    real(dp) :: x, y, fx, xmin, xmax
-    integer :: i, count
-    logical :: accepted
+    real(dp) :: x, y, fx, xmin, xmax, fmax
+    integer :: count, attempts
     real(dp) :: rng1, rng2
 
     integer, allocatable :: seed(:)
     integer :: seed_size
 
-    call random_seed(size=seed_size)
-    allocate(seed(seed_size))
-    seed = 12349
-    call random_seed(put=seed)
-
-    ! call random_seed()
-
-    
-
+    call random_seed()
 
     select case (trim(pdf))
 
@@ -86,54 +81,71 @@ contains
             write(*, '( "Exponential PDF requires one parameter (lambda)" )')
             stop
         end if
+
+        if(pars(1) <= 0.0_dp) then
+            write(*, '( "Error: Exponential decay rate must be positive." )')
+            stop
+        end if
+
         xmin = 0.0_dp
-        xmax = 10.0_dp * pars(1)
+        xmax = 10.0_dp / pars(1)
+        fmax = pars(1) 
 
     case ("Gauss")
         if(size(pars) /= 2) then
             write(*, '( "Gaussian PDF requires two parameters (mean, sigma)." )')
             stop
         end if
+
+        if(pars(2) <= 0.0_dp) then
+            write(*, '( "Error: Standard deviation must be positive." )')
+            stop
+        end if
         
         xmin = pars(1) - 10.0_dp * pars(2)
         xmax = pars(1) + 10.0_dp * pars(2)
+        fmax = (1.0_dp / (pars(2) * sqrt(2.0_dp * pi))) 
     case default
          write(*, '( "Unknown PDF: ", A )') trim(pdf)
         stop
     end select
 
-    
+    ! Acceptance-rejection sampling
+
     count = 0
+    attempts = 0
 
-    do i = 1, 10 * n
-        accepted = .false.
+    do while (count < n .and. attempts < 10*n)
+      
+      call random_number(rng1)
+      call random_number(rng2)
+      x = xmin + rng1 * (xmax - xmin)
+      y = rng2 
 
-        do while (.not. accepted .and. count < n)
-        
-            call random_number(rng1)
-            call random_number(rng2)
-            x = xmin + rng1 * (xmax - xmin)
-            y = rng2 
+      select case (trim(pdf))
 
-            select case (trim(pdf))
+      case ("expo")
+          fx = pars(1) * exp(-pars(1) * x)
+      case ("Gauss")
+          fx = (1.0_dp / (pars(2) * sqrt(2.0_dp * pi))) * exp(-0.5_dp * ((x - pars(1)) / pars(2))**2)
+      end select
+      
+      if (y < fx/fmax) then
+          output_yvals(count+1) = x
+          count = count + 1
+      end if
 
-            case ("expo")
-                fx = pars(1) * exp(-pars(1) * x)
-            case ("Gauss")
-                fx = (1.0_dp / (pars(2) * sqrt(2.0_dp * pi))) * exp(-0.5_dp * ((x - pars(1)) / pars(2))**2)
-            end select
-            
-            if (y < fx) then
-                output_yvals(i) = x
-                count = count + 1
-                accepted = .true.
-            end if
+      attempts = attempts + 1
 
-        end do
     end do
-end subroutine generate_dataset_pdf
 
-  ! This subroutine generates a dataset based on a fiven model assuming a Gaussian distribution
+    if (count < n) write(*, '("Warning: only generated ", I0,  " points out of ", I0)')  count, n
+    
+
+  end subroutine generate_dataset_pdf
+
+  ! This subroutine generates a set of points (x, y, sigmay) based on a given prediction 
+  ! with a Gaussian noise
 
   subroutine generate_dataset_model(n, output_yvals, pars, model, xvals, yerrs)
     integer, intent(in) :: n
@@ -163,16 +175,28 @@ end subroutine generate_dataset_pdf
         err = 1.0_dp  
       end if
 
-      if (model == "linear") then
-        prediction = pars(1) * x + pars(2)
-      else if (model == "quadratic") then
-        prediction = pars(1) * x**2 + pars(2) * x + pars(3)
-      else if (model == "exponential") then
-        prediction = pars(1) * exp(pars(2) * x)
-      else
-        write(*,*) "Unknown model type"
-        return
-      end if      
+      ! Model prediction to estimate the y value
+
+      select case (model)
+      case ("linear")
+          if (size(pars) < 2) then
+              write(*,*) "Error: linear model requires at least 2 parameters (slope, intercept)"
+              stop
+          end if
+          prediction = pars(1) * x + pars(2)
+
+      case ("quadratic")
+          if (size(pars) < 3) then
+              write(*,*) "Error: quadratic model requires 3 parameters (a, b, c)"
+              stop
+          end if
+          prediction = pars(1) * x**2 + pars(2) * x + pars(3)
+
+      case default
+          write(*,*) "Unknown model type: ", trim(model)
+          stop
+      end select
+
       
       output_yvals(i) = prediction + random_shifts(i)*err
 
