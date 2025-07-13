@@ -1,4 +1,6 @@
-
+!!!!!!!!!!!!!!!!!!!!!!!!! FitterModule.f08 !!!!!!!!!!!!!!!!!!!!!!!!!!
+! This module defines the Fitter object and contains functions to initialize it.
+! A Fitter contains all the parameters and results of a fit.
 
 module FitterModule
     use utils, only: dp  
@@ -8,61 +10,59 @@ module FitterModule
 
     type Fitter
 
-        ! -------- Fitter object to hold parameters and yvals for fitting --------
+        ! -------- Fitter object that contains fit settings and results --------
 
-        ! Parameters
-        ! index: identifier for the fit strategy: 
-        !         1: Gaussian fit to histogram
-        ! npars: number of parameters to fit
-        ! p0: initial parameter values
-        ! optional, plabels: labels for the parameters
-        ! optional, hist: Histogram object to hold histogram yvals
-        ! optional, yvals: yvals points to fit
-        ! optional, err_yvals: errors associated with the yvals points
-        ! optional, xvals: x values corresponding to the yvals points
-        ! optional, save_pdf: flag to save PDF values
-        ! tol: tolerance for convergence
-        ! max_iter: maximum number of iterations for fitting
-        ! step: step size for parameter updates
-        ! lrate: learning rate for optimization 
+        ! -- Input parameters, for fit settings --
+            ! likelihood: identifier for the likelihood function to use
+            !            1: Unbinned fit
+            !            2: Binned fit with Poisson likelihood
+            !            3: Binned fit with Gaussian likelihood
+            ! model: string representing the model to fit
+            ! npars: number of parameters to fit
+            ! p0: initial parameter values
+
+            ! optional, plabels: labels for the parameters
+            ! optional, hist: Histogram object to hold histogram yvals
+            ! optional, xvals: x values corresponding to the yvals points
+            ! optional, yvals: yvals points to fit
+            ! optional, err_yvals: errors associated with the yvals points
+            ! optional, tol: tolerance for convergence
+            ! optional, max_iter: maximum number of iterations for fitting
+            ! optional, step: step size for parameter updates
+            ! optional, lrate: learning rate for optimization 
 
 
         integer :: likelihood
         character(len=100) :: model
-        
         integer :: npars 
         real(dp), dimension(:), allocatable :: p0
-        character(len=100) , dimension(:), allocatable :: plabels
 
+        character(len=100) , dimension(:), allocatable :: plabels
         type(Histogram) :: hist
-        real(dp), dimension(:), allocatable :: yvals, err_yvals, xvals
-        real(dp), dimension(:), allocatable :: pdf_vals
-        logical :: save_pdf 
-        
-        
+        real(dp), dimension(:), allocatable :: xvals, yvals, err_yvals
         real(dp) :: tol
         integer :: max_iter
-        real(dp), dimension(:), allocatable :: step
-        real(dp), dimension(:), allocatable :: lrate
+        real(dp), dimension(:), allocatable :: step, lrate
 
         
-        ! Results
-        ! p_min: minimum parameters found during fitting
-        ! grad_p_min: gradient of the fitting function at the minimum parameters
-        ! cov_matrix: covariance matrix of the fitted parameters
-        ! p_err: errors associated with the fitted parameters
-        ! min_FCN: minimum value of the fitting function
-        ! ndof: number of degrees of freedom in the fit
-        ! niter: number of iterations taken to converge
+        ! -- Output parameters, for fit results --
+            ! p_min: minimum parameters found during fitting
+            ! grad_p_min: gradient of the fitting function at the minimum parameters
+            ! p_err: errors associated with the fitted parameters
+            ! cov_matrix: covariance matrix of the fitted parameters
+            ! min_FCN: minimum value of the fitting function
+            ! ndof: number of degrees of freedom in the fit
+            ! niter: number of iterations taken to converge
+            ! save_pdf: flag to save PDF values (set to true when the fit is performed)
+            ! pdf_vals: PDF values corresponding to the yvals points
 
-        real(dp), dimension(:), allocatable :: p_min
-        real(dp), dimension(:), allocatable :: grad_p_min
+        real(dp), dimension(:), allocatable :: p_min, grad_p_min, p_err
         real(dp), dimension(:,:), allocatable :: cov_matrix
-        real(dp), dimension(:), allocatable :: p_err
-
         real(dp) :: min_FCN 
-        integer :: ndof
-        integer :: niter
+        integer :: ndof, niter
+        logical :: save_pdf 
+        real(dp), dimension(:), allocatable :: pdf_vals
+
 
     end type Fitter
 
@@ -79,31 +79,26 @@ module FitterModule
         integer :: i
 
         ! Necessary input parameters
-
-        integer, intent(in) :: likelihood, npars
+        integer, intent(in) :: likelihood
         character(len=*), intent(in) :: model
+        integer, intent(in) :: npars
         real(dp), dimension(:), intent(in) :: p0
 
 
-        ! Optional parameters
+        ! Optional input parameters
         character(len=*), dimension(:), intent(in), optional :: plabels
-        real(dp), dimension(:), intent(in), optional :: step
-        real(dp), dimension(:), intent(in), optional :: lrate
+         type(Histogram), intent(in), optional :: hist
+        real(dp), dimension(:), intent(in), optional :: xvals, yvals, err_yvals
         real(dp), intent(in), optional :: tol
         integer, intent(in), optional :: max_iter
+        real(dp), dimension(:), intent(in), optional :: step, lrate
 
-        type(Histogram), intent(in), optional :: hist
-        real(dp), dimension(:), intent(in), optional :: yvals, err_yvals, xvals
-
-
-
+       
         ! --- Input parameters initialisation ---
 
         fitter_instance%likelihood = likelihood
         fitter_instance%model = model
         fitter_instance%npars = npars
-
-        ! Allocate and initialize parameters
         allocate(fitter_instance%p0(fitter_instance%npars))
         fitter_instance%p0 = p0
 
@@ -126,47 +121,35 @@ module FitterModule
             fitter_instance%hist = Histogram(0, 1.0_dp, 1.0_dp, "Null Histogram")
         end if
 
-        ! yvals initialization
-        if (present(yvals)) then
-            allocate(fitter_instance%yvals(size(yvals)))
-            fitter_instance%yvals = yvals
+        ! xvals and yvals initialization
+        if (present(yvals) .and. present(xvals)) then
+            if(size(xvals) == size(yvals)) then
+                allocate(fitter_instance%yvals(size(yvals)))
+                fitter_instance%yvals = yvals
+                allocate(fitter_instance%xvals(size(xvals)))
+                fitter_instance%xvals = xvals
+            else
+                write(*,*) "Error: yvals and xvals must have the same size."
+                stop
+            end if
+           
         else
             allocate(fitter_instance%yvals(0))  
+            allocate(fitter_instance%xvals(0))
         end if
         
         ! Error yvals initialization
         if (present(err_yvals)) then
             allocate(fitter_instance%err_yvals(size(err_yvals)))
             fitter_instance%err_yvals = err_yvals
-        else
+        else if (present(yvals) .and. present(xvals)) then
             allocate(fitter_instance%err_yvals(size(yvals))) 
-        end if
-
-        ! X values initialization
-        if (present(xvals)) then
-            allocate(fitter_instance%xvals(size(xvals)))
-            fitter_instance%xvals = xvals
+            fitter_instance%err_yvals = 1.0_dp
         else
-            allocate(fitter_instance%xvals(size(yvals))) 
+            allocate(fitter_instance%err_yvals(0))  
         end if
 
-
-        ! Model values initialization
-        if(present(xvals)) then
-
-            allocate(fitter_instance%pdf_vals(size(xvals)))
-            fitter_instance%pdf_vals = 0.0_dp  
-
-        else if(present(hist) ) then
-            allocate(fitter_instance%pdf_vals(hist%nbins))
-            fitter_instance%pdf_vals = 0.0_dp  
-        else
-            allocate(fitter_instance%pdf_vals(size(yvals)))  
-        end if
-
-        ! Save PDF flag initialization
-        fitter_instance%save_pdf = .false. 
-
+        
 
         ! Tolerance initialization
         if (present(tol)) then
@@ -188,7 +171,7 @@ module FitterModule
             fitter_instance%step = step
         else
             allocate(fitter_instance%step(fitter_instance%npars))
-            fitter_instance%step = 1.0e-6_dp  ! Default step size
+            fitter_instance%step = 1.0e-6_dp  
         end if
 
         ! Learning rate initialization
@@ -197,18 +180,18 @@ module FitterModule
             fitter_instance%lrate = lrate
         else
             allocate(fitter_instance%lrate(fitter_instance%npars))
-            fitter_instance%lrate = 1.0e-6_dp   ! Default learning rate
+            fitter_instance%lrate = 1.0e-6_dp   
         end if
 
         ! Ensure the learning rate and the steps are positive
 
         do i = 1, size(fitter_instance%lrate)
             if (fitter_instance%lrate(i) <= 0.0_dp) then
-                write(*, '( "Warning: Learning rate must be positive: Index " , I0, " is " , F10.5, " ---> Setting to default value of 0.01.")') i , fitter_instance%lrate(i)
+                write(*, '( "Warning: Learning rate must be positive: Index " , I0, " is " , F10.5, " ---> Setting to default value of 1e-6.")') i , fitter_instance%lrate(i)
                 fitter_instance%lrate(i) = 1.0e-6_dp 
             end if
             if (fitter_instance%step(i) <= 0.0_dp) then
-                write(*, '( "Warning: Step size must be positive: Index " , I0, " is " , F10.5, " ---> Setting to default value of 0.01.")') i , fitter_instance%step(i)
+                write(*, '( "Warning: Step size must be positive: Index " , I0, " is " , F10.5, " ---> Setting to default value of 1e-6.")') i , fitter_instance%step(i)
                 fitter_instance%step(i) = 1.0e-6_dp 
             end if
         end do
@@ -225,20 +208,19 @@ module FitterModule
         allocate(fitter_instance%grad_p_min(fitter_instance%npars))
         fitter_instance%grad_p_min = 0.0_dp
         
-        ! Initialize the covariance matrix
-        allocate(fitter_instance%cov_matrix(fitter_instance%npars, fitter_instance%npars))
-        fitter_instance%cov_matrix = 0.0_dp
-
         ! Initialize the parameter errors
         allocate(fitter_instance%p_err(fitter_instance%npars))
         fitter_instance%p_err = 0.0_dp
 
+        ! Initialize the covariance matrix
+        allocate(fitter_instance%cov_matrix(fitter_instance%npars, fitter_instance%npars))
+        fitter_instance%cov_matrix = 0.0_dp
 
         ! Initialize the minimum function value
         fitter_instance%min_FCN = 0.0_dp
 
         ! Initialize degrees of freedom
-        if(present(yvals)) then
+        if(present(yvals) .and. present(xvals)) then
             fitter_instance%ndof = size(yvals) - npars
         else if(present(hist)) then
             fitter_instance%ndof = hist%nbins - npars
@@ -246,8 +228,27 @@ module FitterModule
             fitter_instance%ndof = 0  ! Default case if no yvals or histogram is provided
         end if
 
+        if (fitter_instance%ndof < 0) then
+            write(*,*), "Warning: Negative number of degrees of freedom!"
+            stop
+        end if
+
         ! Initialize the number of iterations
         fitter_instance%niter = 0
+        
+        ! Save PDF flag initialization. Will be set to true when the fit is performed   
+        fitter_instance%save_pdf = .false. 
+
+        ! Saved pdf values initialization
+        if(present(xvals) .and. present(yvals)) then
+            allocate(fitter_instance%pdf_vals(size(xvals)))
+            fitter_instance%pdf_vals = 0.0_dp  
+        else if(present(hist) ) then
+            allocate(fitter_instance%pdf_vals(hist%nbins))
+            fitter_instance%pdf_vals = 0.0_dp  
+        else
+            allocate(fitter_instance%pdf_vals(0))
+        end if
 
 
     end function init_Fitter
