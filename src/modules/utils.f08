@@ -1,7 +1,7 @@
 module utils
     integer, parameter :: dp = kind(1.0d0)
-    real(dp) :: pi = 4.0_dp * atan(1.0_dp)
-    real(dp) :: e = exp(1.0_dp)
+    real(dp), parameter :: pi = 4.0_dp * atan(1.0_dp)
+    real(dp), parameter :: e = exp(1.0_dp)
     
     interface xgetrf
         module procedure dgetrf_interface
@@ -33,38 +33,6 @@ module utils
         end subroutine append_element
 
 
-        ! Function to check if two real numbers are close to each other
-
-        logical function closeto(x, y, relative, absolute )
-
-            real(dp) , intent(in):: x,y
-            real , intent(in) , optional :: relative, absolute
-            real :: th_relative, th_absolute, threshold
-
-            ! Assign the thresholds using the default values or the input values
-            if(present(relative)) then 
-                th_relative = relative
-            else
-                th_relative = 1e-10_dp 
-            end if
-
-            if(present(absolute)) then 
-                th_absolute = absolute
-            else
-                th_absolute = 1e-10_dp
-            end if
-
-            ! Now choose the global threshold and test both absolute and relative differences
-
-            threshold = min(th_absolute, th_relative * max(abs(x), abs(y)))
-            if(max(abs(x), abs(y)) < th_absolute) then
-                threshold = th_absolute
-            end if
-
-            closeto = abs(x - y) .le. threshold
-
-        end function closeto
-
         ! Interface wrapper for DGETRF 
         subroutine dgetrf_interface(m, n, a, lda, ipiv, info)
             integer, intent(in) :: m, n, lda
@@ -94,20 +62,21 @@ module utils
 
             real(dp), intent(in)  :: A(:,:)
             real(dp), intent(out) :: Ainv(:,:)
-            integer :: n, info, lwork
+            integer :: n, info, lwork, i, j
             integer, allocatable :: ipiv(:)
             real(dp), allocatable :: work(:), identity(:,:)
-            logical :: success
-            real(dp) :: exp
 
+            if (size(A, 1) /= size(A, 2)) then
+                print *, "Error: invert_matrix expects a square matrix."
+                stop
+            end if
 
             n = size(A, 1)
             Ainv = A
             allocate(ipiv(n))
 
-            ! First, perform LU decomposition
+            ! LU decomposition
             call xgetrf(n, n, Ainv, n, ipiv, info) 
-
             if (info /= 0) then
                 print*, "################### Error in LU decomposition ###################"
                 print *, " LU decomposition failed. INFO =", info
@@ -115,8 +84,8 @@ module utils
                 stop
             end if
 
-
-            lwork = -1
+            ! Query for optimal workspace size
+            lwork = -1 
             allocate(work(1))
             call xgetri(n, Ainv, n, ipiv, work, lwork, info)
             lwork = int(work(1))  
@@ -124,8 +93,7 @@ module utils
             allocate(work(lwork))
 
             ! Perform matrix inversion
-            call dgetri(n, Ainv, n, ipiv, work, lwork, info)
-
+            call xgetri(n, Ainv, n, ipiv, work, lwork, info)
             if (info /= 0) then
                 print *, "################### Error in matrix inversion ###################"
                 print *, " Matrix inversion failed. INFO =", info
@@ -135,32 +103,22 @@ module utils
 
             deallocate(ipiv, work)
 
-            ! check if Ainv is the inverse of A
+            ! Verify inversion
 
             allocate(identity(n,n))
             identity = matmul(A, Ainv)
 
-
             do i = 1, n
                 do j = 1, n
-                   
-                    if (i == j) then
-                        exp = 1.0_dp  
-                    else
-                        exp = 0.0_dp
-                    end if
-
-                    if ( closeto(identity(i,j), exp ) ) then
-                        success = .true.
-                    else
-                        success = .false.
-                        print *, "################### Inversion check failed ###################"
-                        write(*, '(A,I0,A,I0,A,F20.10)') " Identity matrix element (", i, ",", j, ") = ", identity(i,j)
-                        stop
+                    if ( abs(identity(i,j) - merge(1.0_dp, 0.0_dp, i == j)) > 1.0e-10_dp ) then
+                        write(*,*) "################### Inversion check failed ###################"
+                        write(*, '(" Identity matrix element (",I0,",",I0,") = ",F0.10)')  i,  j, identity(i,j)
+                        call exit(1)
                     end if
                 end do
             end do
             
+            deallocate(identity)
           
         end subroutine invert_matrix
 
