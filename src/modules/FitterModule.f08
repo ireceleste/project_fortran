@@ -229,7 +229,7 @@ module FitterModule
         end if
 
         if (fitter_instance%ndof < 0) then
-            write(*,*), "Warning: Negative number of degrees of freedom!"
+            write(*,'("Warning: Negative number of degrees of freedom!")')
             stop
         end if
 

@@ -39,7 +39,7 @@ contains
             write(iu, '("Parameters: ", I0)') fitter_instance%npars
             write(iu, '("Initial parameters: ")', advance='no')
             do j = 1, fitter_instance%npars
-                write(iu, '(F12.3)', advance='no') fitter_instance%p0(j)
+                write(iu, '(F0.3)', advance='no') fitter_instance%p0(j)
                 if (j < fitter_instance%npars) then
                     write(iu, '(A)', advance='no') ", "
                 else
@@ -49,7 +49,7 @@ contains
             
             write(iu, '("Step sizes: ")', advance='no')
             do j = 1, fitter_instance%npars
-                write(iu, '(ES10.2)', advance='no') fitter_instance%step(j)
+                write(iu, '(ES0.2)', advance='no') fitter_instance%step(j)
                 if (j < fitter_instance%npars) then
                     write(iu, '(A)', advance='no') ", "
                 else
@@ -58,14 +58,14 @@ contains
             end do
             write(iu, '("Learning rates: ")', advance='no')
             do j = 1, fitter_instance%npars
-                write(iu, '(ES8.2)', advance='no') fitter_instance%lrate(j)
+                write(iu, '(ES0.2)', advance='no') fitter_instance%lrate(j)
                 if (j < fitter_instance%npars) then
                     write(iu, '(A)', advance='no') ", "
                 else
                     write(iu, '(/)', advance='no') 
                 end if
             end do
-            write(iu, '("Tolerance: ", ES10.2)') fitter_instance%tol
+            write(iu, '("Tolerance: ", ES0.2)') fitter_instance%tol
             write(iu, '("Maximum iterations: ", I0)') fitter_instance%max_iter
             write(iu, '(/,A,/)') repeat('=', 90)
         end if
@@ -76,6 +76,7 @@ contains
         do i = 1, fitter_instance%max_iter 
 
             grad = 0.0_dp
+            fmin = FCN(fitter_instance) ! Evaluate the function at the current parameters
 
             do j = 1, fitter_instance%npars
                 
@@ -84,29 +85,27 @@ contains
                     print *, "Error: Step size is zero for parameter ", j
                     grad(j) = 0.0_dp
                 else
-                fitter_instance%p_min(j) = p(j) + fitter_instance%step(j)
-                f1 = FCN(fitter_instance)
-                fitter_instance%p_min(j) = p(j) - fitter_instance%step(j)
-                f2 = FCN(fitter_instance)
-                grad(j) = (f1 - f2) / (2*fitter_instance%step(j))
+                    fitter_instance%p_min(j) = p(j) + fitter_instance%step(j)
+                    f1 = FCN(fitter_instance)
+                    fitter_instance%p_min(j) = p(j) - fitter_instance%step(j)
+                    f2 = FCN(fitter_instance)
+                    grad(j) = (f1 - f2) / (2*fitter_instance%step(j))
 
-                fitter_instance%p_min(j) = p(j)  ! Reset to original value
-
-                fmin = FCN(fitter_instance)
+                    fitter_instance%p_min(j) = p(j)  ! Reset to original value
                 end if
+
                 if(present(verbose_log)) then
-                    write(iu, '("Iteration " , I0, " - parameter " , I0 , " = " , F12.3, " - grad = ", F20.3)') i,j, p(j), grad(j)
+                    write(iu, '("Iteration " , I0, " - parameter " , I0 , " = " , F11.3, " - FCN = ", F11.3, " - grad = ", ES12.3)') i,j, p(j), fmin, grad(j)
                 end if
             end do
-
-            if (maxval(abs(grad)) < fitter_instance%tol) exit
             
-
+            if (maxval(abs(grad)) < fitter_instance%tol) exit
             p = p - fitter_instance%lrate * grad
+            fitter_instance%p_min = p  
+            
         end do
 
         fitter_instance%niter = i
-
         fitter_instance%p_min = p
         fitter_instance%grad_p_min = grad
         fitter_instance%min_FCN = fmin
@@ -158,57 +157,68 @@ contains
         type(Fitter) :: tmp
 
         n = fitter_instance%npars
-        allocate(Hess(n, n))
-        allocate(p(n))
+        allocate(Hess(n, n), cov_matrix(n,n), p(n))
         p = fitter_instance%p_min
-        
+
+        f0 = FCN(fitter_instance)
 
         do i = 1, n
-            do j = 1, n
+            do j = i, n
 
                 if(fitter_instance%step(i) == 0.0_dp .or. fitter_instance%step(j) == 0.0_dp) then
                     Hess(i,j) = 0.0_dp
                     cycle
                 end if
 
+            
+                ! fpp: +i, +j
                 tmp = fitter_instance
                 tmp%p_min = p
-
-                f0 = FCN(tmp)
-            
                 tmp%p_min(i) = p(i) + fitter_instance%step(i)
                 tmp%p_min(j) = p(j) + fitter_instance%step(j)
-                
                 fpp = FCN(tmp)
 
+                ! fmm: -i, -j
+                tmp = fitter_instance
+                tmp%p_min = p
                 tmp%p_min(i) = p(i) - fitter_instance%step(i)
                 tmp%p_min(j) = p(j) - fitter_instance%step(j)
                 fmm = FCN(tmp)
 
-                tmp%p_min(i) = p(i) + fitter_instance%step(i)
-                tmp%p_min(j) = p(j) - fitter_instance%step(j)
-                fpm = FCN(tmp)
 
-                tmp%p_min(i) = p(i) - fitter_instance%step(i)
-                tmp%p_min(j) = p(j) + fitter_instance%step(j)
-                fmp = FCN(tmp)
 
                 if( i == j ) then
                     Hess(i,j) = (fpp - 2.0_dp * f0 + fmm) / (fitter_instance%step(i)**2)
                 else
-                    ! Mixed partial derivatives
+                    ! fpm: +i, -j
+                    tmp = fitter_instance
+                    tmp%p_min = p
+                    tmp%p_min(i) = p(i) + fitter_instance%step(i)
+                    tmp%p_min(j) = p(j) - fitter_instance%step(j)
+                    fpm = FCN(tmp)
+
+                    ! fmp: -i, +j
+                    tmp = fitter_instance
+                    tmp%p_min = p
+                    tmp%p_min(i) = p(i) - fitter_instance%step(i)
+                    tmp%p_min(j) = p(j) + fitter_instance%step(j)
+                    fmp = FCN(tmp)
                     Hess(i,j) = (fpp - fpm - fmp + fmm) / (4*fitter_instance%step(i)* fitter_instance%step(j))
                 end if
+            end do
+        end do
+
+        ! Symmetrize Hessian
+        do i = 1, n
+            do j = i+1, n
+                Hess(j,i) = Hess(i,j)
             end do
         end do
 
         
         ! Invert the Hessian to get the covariance matrix
 
-        allocate(cov_matrix(n,n))
         call invert_matrix(Hess, cov_matrix)
-
-        
         fitter_instance%cov_matrix = cov_matrix
 
         ! Calculate the standard deviations from the covariance matrix
@@ -229,7 +239,8 @@ contains
         type(Fitter), intent(in) :: fitter_instance
         character(len=*), intent(in), optional :: filename
         integer :: iu
-
+        character(len=8)  :: date_str
+        character(len=10) :: time_str
 
         if(present(filename)) then
             iu = 99
@@ -244,9 +255,28 @@ contains
         write(iu, '(A)', advance = 'no') " FIT RESULTS SUMMARY ="
         write(iu, '(A,/)') repeat('=', 34)
 
+        
+
+        call date_and_time(date=date_str, time=time_str)
+
+        write(iu, '(A,1x,A," at ",A)') "Fit performed on", date_str(1:4)//"-"//date_str(5:6)//"-"//date_str(7:8), &
+                                            time_str(1:2)//":"//time_str(3:4)//":"//time_str(5:6)
+        write(iu, '()')
+
 
         write(iu, '(A)') "Fit model:         " // trim(fitter_instance%model)
-        write(iu, '(A,I0)') "Likelihood:        ", fitter_instance%likelihood
+        write(iu, '(A,I0, " - ")', advance = 'no') "Likelihood:        ", fitter_instance%likelihood
+        select case (fitter_instance%likelihood)
+            case(1)  
+                write(iu, '(A)') "Unbinned fit (chi2)"
+            case(2)  
+                write(iu, '(A)') "Binned fit (Poisson)"
+            case(3)  
+                write(iu, '(A)') "Binned fit (Gaussian)"
+            case default
+                write(iu, '(A)') "Unknown likelihood"
+        end select
+
         write(iu, '(A,I0)') "Number of pars:    ", fitter_instance%npars
 
         write(iu, '(A)', advance = 'no') "Fit status:        "
@@ -286,14 +316,14 @@ contains
         write(iu, '(/,A)') "Covariance matrix  "
         write(iu, '(A)')   "------------------ "
 
-        write(iu, '(A)', advance='no') "             "  ! Column header padding
+        write(iu, '(A)', advance='no') "             "  
         do j = 1, fitter_instance%npars
             write(iu, '(A11,6x)', advance='no') adjustl(trim(fitter_instance%plabels(j)))
         end do
         write(iu, '(/)')
 
         do i = 1, fitter_instance%npars
-            ! Row label
+            
             write(iu, '(A13)', advance='no') adjustl(trim(fitter_instance%plabels(i)))
             do j = 1, fitter_instance%npars
                 if (j < i) then
@@ -309,14 +339,14 @@ contains
         write(iu, '(/,A)') "Correlation matrix "
         write(iu, '(A)')   "------------------ "
 
-        write(iu, '(A)', advance='no') "             "  ! Column header padding
+        write(iu, '(A)', advance='no') "             "  
         do j = 1, fitter_instance%npars
             write(iu, '(A11,6x)', advance='no') adjustl(trim(fitter_instance%plabels(j)))
         end do
         write(iu, '(/)')
 
         do i = 1, fitter_instance%npars
-            ! Row label
+            
             write(iu, '(A13)', advance='no') adjustl(trim(fitter_instance%plabels(i)))
             do j = 1, fitter_instance%npars
                 if (j < i) then
@@ -326,7 +356,7 @@ contains
                         (fitter_instance%p_err(i) * fitter_instance%p_err(j))
                 end if
             end do
-            write(iu, '()')  ! End of row
+            write(iu, '()')  
         end do
 
 
@@ -356,21 +386,44 @@ contains
 
         type(Fitter) :: fitter_instance
         character(len=*), intent(in) :: filename
-
-        integer :: i
-        real(dp) :: fval, pdf_val
-        integer :: n
-        real(dp) :: x, y, err_y
+        integer :: n, i, ipar, iu = 99, ncolumns = 0
+        real(dp) ::  x, y, err_y
 
         if(fitter_instance%hist%nbins > 0) then
             n = fitter_instance%hist%nbins
         else
             n = size(fitter_instance%yvals)
         end if
-        
+
         open(unit=iu, file=filename, status='replace')
+
+
+        write(iu, '("# ", A13, 1x, A15, 1x)', advance = "no") "FCN value", "ndof"
+        ncolumns = 2
+        do ipar = 1, size(fitter_instance%p_min)
+            write(iu, '(A15, 1x, A15, 1x)', advance = "no") &
+                trim(fitter_instance%plabels(ipar)), "uncertainty"
+            ncolumns = ncolumns + 2
+        end do
+        write(iu, '( 1x )')  
+        write(iu, '("#", A) ') repeat('-', ncolumns * 16)
+
+        fitter_instance%save_pdf = .true.          
+        write(iu, '( F15.6, 1x, I15, 1x )', advance = "no") &
+            FCN(fitter_instance), fitter_instance%ndof
+
+        do ipar = 1, size(fitter_instance%p_min)
+            write(iu, '( F15.6 , 1x, F15.6 , 1x)', advance = "no") &
+                fitter_instance%p_min(ipar), fitter_instance%p_err(ipar)
+        end do
+
+        write(iu, '( /, 1x ,/ )')  
+
         
-        fitter_instance%save_pdf = .true.  
+
+        write(iu, '("# ", A13, 1x, A15, 1x, A15, 1x, A15, 1x)') &
+            "x", "y", "err_y", "f(x)"
+        write(iu, '("#", A) ') repeat('-', ncolumns * 16)
 
         do i = 1, n
 
@@ -383,21 +436,16 @@ contains
                 y = fitter_instance%yvals(i)
                 err_y = fitter_instance%err_yvals(i)
             end if
-
-            fval = FCN(fitter_instance)
-            pdf_val = fitter_instance%pdf_vals(i)  ! Store the PDF values for each bin
-
-                
-            write(iu, '(F12.6, 1x, F12.6, 1x, F12.6, 1x, F12.6, 1x, F12.6, 1x, I0 )', advance = "no") &
-                x, y, err_y, pdf_val, fval, fitter_instance%ndof
-
-            do ipar = 1, size(fitter_instance%p_min)
-                write(iu, '( F12.6 , 1x, F12.6 , 1x)', advance = "no") &
-                    fitter_instance%p_min(ipar), fitter_instance%p_err(ipar)
+   
+            write(iu, '(F15.6, 1x, F15.6, 1x, F15.6, 1x, F15.6, 1x )', advance = "no") &
+                x, y, err_y, fitter_instance%pdf_vals(i) 
+            
+            do ipar = 5, ncolumns
+                write(iu, '( F15.6, 1x )', advance = "no") &
+                    0.0_dp  ! Placeholder for reading in python
             end do
             
             write(iu, '( 1x )')
-
             
         end do
 
@@ -405,6 +453,7 @@ contains
 
         write(*, '("Exported histogram and function values to ", A, " - to plot the results, use the following command:")')  trim(filename)
         write(*, '("  > python plot.py ", A )') trim(filename)
+
 end subroutine export_hist_and_fcn
 
 
