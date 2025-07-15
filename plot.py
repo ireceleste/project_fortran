@@ -15,17 +15,17 @@ def plotFit(results, results_path='output/'):
         os.makedirs(results_path)
 
 
-    data = np.loadtxt(results)
+    data = np.loadtxt(results, comments='#')
     n_columns = data.shape[1]
 
 
-    x_raw = data[:, 0]
-    y_hist_raw = data[:, 1]
-    err_y_hist_raw = data[:, 2]
-    y_fcn_raw = data[:, 3]
+    x_raw = data[1:, 0]
+    y_hist_raw = data[1:, 1]
+    err_y_hist_raw = data[1:, 2]
+    y_fcn_raw = data[1:, 3]
 
-    min_fcn = data[1, 4]
-    ndof = data[1, 5]
+    min_fcn = data[0, 0]
+    ndof = data[0, 1]
 
     pars = []
     err_pars = []
@@ -48,10 +48,10 @@ def plotFit(results, results_path='output/'):
 
 
     # Extract parameters and their errors
-    for i in range(6, n_columns, 2):
-        pars.append(data[1, i])
-        err_pars.append(data[1, i+1])
-    pars_names = [f'$p_{i-5}$' for i in range(6, n_columns)]
+    for i in range(2, n_columns, 2):
+        pars.append(data[0, i])
+        err_pars.append(data[0, i+1])
+    pars_names = [f'$p_{i-1}$' for i in range(2, n_columns)]
 
     
 
@@ -68,14 +68,23 @@ def plotFit(results, results_path='output/'):
 
     # --- Plot histogram and fitted function ---
 
-    ax1.errorbar(x, y_hist, yerr=err_y_hist, fmt='.', label='Histogram', capsize=2, color='blue')
     ax1.plot(x_dense, y_fcn_dense, label='Fitted pdf', color='red')
+    ax1.errorbar(x, y_hist, yerr=err_y_hist, fmt='.', label='Data', capsize=2, color='blue')
 
     fit_info = (
         f"$\chi^2$/ndof = {min_fcn:.1f} / {ndof:.0f}\n"
     )
     for i in range(len(pars)):
-        fit_info += f"{pars_names[i]} = {pars[i]:.4f} $\pm$ {err_pars[i]:.4f}\n"
+        if err_pars[i] > 1:
+            fit_info  += f"{pars_names[i]} = {pars[i]:.0f} $\pm$ {err_pars[i]:.0f}\n"
+        elif err_pars[i] > 0.1:
+            fit_info += f"{pars_names[i]} = {pars[i]:.1f} $\pm$ {err_pars[i]:.1f}\n"
+        elif err_pars[i] > 0.01:
+            fit_info += f"{pars_names[i]} = {pars[i]:.2f} $\pm$ {err_pars[i]:.2f}\n"
+        elif err_pars[i] > 0.001:
+            fit_info += f"{pars_names[i]} = {pars[i]:.3f} $\pm$ {err_pars[i]:.3f}\n"
+        else:
+            fit_info += f"{pars_names[i]} = {pars[i]:.4f} $\pm$ {err_pars[i]:.4f}\n"
     ax1.plot([], [], ' ', label=fit_info)  
 
 

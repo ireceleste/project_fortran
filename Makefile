@@ -1,12 +1,10 @@
-FC = gfortran-14
-FCFLAGS = -J./mod -I./mod -llapack -lblas
+FC = gfortran
+FCFLAGS = -J./mod -I./mod 
 SRCDIR = ./src
 MODDIR = ./mod
 OBJDIR = ./obj
 BINDIR = ./bin
 OUTDIR = ./output
-
-VPATH = $(SRCDIR)/modules
 
 MODULE_SRCS = \
     $(SRCDIR)/modules/utils.f08 \
@@ -17,8 +15,6 @@ MODULE_SRCS = \
     $(SRCDIR)/modules/GaussianGenerator.f08 \
 	$(SRCDIR)/modules/InputOutput.f08 \
 
-
-# Object files in the desired order: utils.o, Minimizer.o, others...
 OBJS = $(patsubst $(SRCDIR)/modules/%.f08, $(OBJDIR)/%.o, $(MODULE_SRCS))
 
 
@@ -27,7 +23,7 @@ all: directories main
 # The main target compiles the main program and links it with the object files
 
 main: $(OBJS) $(SRCDIR)/main.f08
-	$(FC) $(FCFLAGS) -o $(BINDIR)/$@ $^	
+	$(FC) $(FCFLAGS) -llapack -lblas -o $(BINDIR)/$@ $^	
 
 $(OBJDIR)/%.o: $(SRCDIR)/modules/%.f08
 	$(FC) $(FCFLAGS) -c $< -o $@
@@ -50,10 +46,13 @@ ${OUTDIR}:
 	mkdir -p $(OUTDIR)
 
 # The clean target removes all compiled files and directories
+
 .PHONY: clean
 clean: 
 	rm -rf $(BINDIR)/* $(MODDIR)/*.mod $(OBJDIR)/*.o 
 	rmdir $(BINDIR) $(MODDIR) $(OBJDIR) 
+
+# The clean_output removes all output files and plots
 
 .PHONY: clean_output
 clean_output:
