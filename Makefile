@@ -9,25 +9,25 @@ BINDIR = ./bin
 OUTDIR = ./output
 
 MODULE_SRCS = \
-    $(SRCDIR)/modules/utils.f08 \
-	$(SRCDIR)/modules/HistogramHandler.f08 \
-	$(SRCDIR)/modules/FitterModule.f08 \
-    $(SRCDIR)/modules/Minimizer.f08 \
-    $(SRCDIR)/modules/FunctionModule.f08 \
-    $(SRCDIR)/modules/GaussianGenerator.f08 \
-	$(SRCDIR)/modules/InputOutput.f08 \
+    $(SRCDIR)/modules/utils.f90 \
+	$(SRCDIR)/modules/HistogramHandler.f90 \
+	$(SRCDIR)/modules/FitterModule.f90 \
+    $(SRCDIR)/modules/Minimizer.f90 \
+    $(SRCDIR)/modules/FunctionModule.f90 \
+    $(SRCDIR)/modules/GaussianGenerator.f90 \
+	$(SRCDIR)/modules/InputOutput.f90 \
 
-OBJS = $(patsubst $(SRCDIR)/modules/%.f08, $(OBJDIR)/%.o, $(MODULE_SRCS))
+OBJS = $(patsubst $(SRCDIR)/modules/%.f90, $(OBJDIR)/%.o, $(MODULE_SRCS))
 
 
 all: directories main
 
 # The main target compiles the main program and links it with the object files
 
-main: $(OBJS) $(SRCDIR)/main.f08
+main: $(OBJS) $(SRCDIR)/main.f90
 	$(FC) $(FCFLAGS) $(LDFLAGS) -o $(BINDIR)/$@ $^	
 
-$(OBJDIR)/%.o: $(SRCDIR)/modules/%.f08
+$(OBJDIR)/%.o: $(SRCDIR)/modules/%.f90
 	$(FC) $(FCFLAGS) -c $< -o $@
 
 
