@@ -37,5 +37,5 @@ bin/main -m
 ``` 
 Once the fit has been performed, if the results have been saved to an output file, it is possible to plot the data with the best-fit model overlaid and the pulls:
 ```
-plot.py <output_file>
+python plot.py <output_file>
 ```
