@@ -44,11 +44,11 @@ module HistogramHandler
 
             type(Histogram) :: histogram_instance
 
-            if(bin_min >= bin_max) then
+            if(bin_min > bin_max) then
                 write(*, '(/,A)') "Error: bin_min must be less than bin_max."
                 stop
             end if
-            if(nbins <= 0) then
+            if(nbins < 0) then
                 write(*, '(/,A)') "Error: nbins must be a positive integer."
                 stop
             end if

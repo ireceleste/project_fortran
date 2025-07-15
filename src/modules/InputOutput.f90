@@ -607,7 +607,7 @@ module InputOutput
             if(card%binned) then
                 card%n_points = 10000  ! Default number of points for binned data generation
             else
-                card%n_points = 50  ! Default number of points for unbinned data generation
+                card%n_points = 25  ! Default number of points for unbinned data generation
             end if
         end if
 
