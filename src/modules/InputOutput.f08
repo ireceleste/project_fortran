@@ -50,7 +50,7 @@ module InputOutput
             write(*, '(/,A)') "======================= INPUT FORMAT ======================="
             write(*, '(A)') "An input card must be provided as the first command-line argument:"
             write(*, '(A)') "  > bin/main path/to/inputcard"
-            write(*, '(A)') "The input card is a two-column text file, with optionally a divider (, | ; :)"
+            write(*, '(A)') "The input card is a two-column text file, with optionally a divider (, | ; : =)"
             write(*, '(A)') "  [key]    [value]"
             write(*, '(A)') "Lines after the first empty line are ignored."
             write(*, '(A)') "Lines starting with ! # / are ignored."
@@ -267,9 +267,9 @@ module InputOutput
                         pos2 = pos2 + 1
                     end do
 
-                    if(line(pos1:pos2-1) /= ',' .and. line(pos1:pos2-1) /= ';'&
-                        .and. line(pos1:pos2-1) /= '|' .and. line(pos1:pos2-1) /= ':' &
-                        .and. line(pos1:pos2-1) /= '=') then
+                    if(line(pos1:pos1) /= ',' .and. line(pos1:pos1) /= ';'&
+                        .and. line(pos1:pos1) /= '|' .and. line(pos1:pos1) /= ':' &
+                        .and. line(pos1:pos1) /= '=') then
                         num_tokens = num_tokens + 1
                         tokens(num_tokens) = line(pos1:pos2-1)
                     end if
@@ -345,7 +345,7 @@ module InputOutput
                     case ('quadratic', 'quad', 'poly2', 'parabola')
                         card%model = 'quadratic'
                         modelflg = .true.
-                    case ('gauss', 'gaussian')
+                    case ('gauss', 'gaussian', 'gaus')
                         card%model = 'Gauss'
                         modelflg = .true.
                     case ('expo', 'exp', 'exponential')
@@ -785,18 +785,12 @@ module InputOutput
             call append_element(card%step, real(n, dp)*1.0e-3_dp)  
 
 
-            
-            if(card%model == "Gauss") then
-                xmin = card%x_start(1) - 3.0_dp * card%x_start(2)
-                xmax = card%x_start(1) + 3.0_dp * card%x_start(2)
-            else if (card%model == "expo") then
-                xmin = 0.0_dp
-                xmax = 5.0_dp / card%x_start(1)
-            else
-                xmin = 0.0_dp
-                xmax = 0.0_dp
+            xmin = minval(xvals)
+            xmax = maxval(xvals)
+            if (xmin == xmax) then
+                xmin = xmin - 0.5_dp
+                xmax = xmax + 0.5_dp
             end if
-
             nbins_hist = 2*(int(log(real(n,dp)) / log(2.0_dp)) + 1)
             nbins_hist = max(nbins_hist, 5)
 
