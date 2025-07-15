@@ -28,11 +28,18 @@ contains
         real(dp), dimension(fitter_instance%npars) :: p, grad
         real(dp) :: h, f1, f2, fmin
         integer :: i, j, iu
+        character(len=8)  :: date_str
+        character(len=10) :: time_str
 
         if(present(verbose_log)) then
             iu = 99
             open(unit=iu, file=verbose_log, status='replace')
             write(iu, '(/,A,/)') repeat('=', 90)
+            call date_and_time(date=date_str, time=time_str)
+
+            write(iu, '(A,1x,A," at ",A)') "Fit performed on", date_str(1:4)//"-"//date_str(5:6)//"-"//date_str(7:8), &
+                                                time_str(1:2)//":"//time_str(3:4)//":"//time_str(5:6)
+            write(iu, '()')
             write(iu, '("Starting gradient descent minimization with the following settings: " /)')
             write(iu, '("Likelihood: ", I0)') fitter_instance%likelihood
             write(iu, '("Model: ", A)') fitter_instance%model
@@ -102,7 +109,7 @@ contains
             if (maxval(abs(grad)) < fitter_instance%tol) exit
             p = p - fitter_instance%lrate * grad
             fitter_instance%p_min = p  
-            
+
         end do
 
         fitter_instance%niter = i
@@ -318,13 +325,13 @@ contains
 
         write(iu, '(A)', advance='no') "             "  
         do j = 1, fitter_instance%npars
-            write(iu, '(A11,6x)', advance='no') adjustl(trim(fitter_instance%plabels(j)))
+            write(iu, '(A11,6x)', advance='no') trim(fitter_instance%plabels(j))
         end do
         write(iu, '(/)')
 
         do i = 1, fitter_instance%npars
             
-            write(iu, '(A13)', advance='no') adjustl(trim(fitter_instance%plabels(i)))
+            write(iu, '(A13)', advance='no') trim(fitter_instance%plabels(i))
             do j = 1, fitter_instance%npars
                 if (j < i) then
                     write(iu, '(A17)', advance='no') " "  ! Blank lower triangle
@@ -341,13 +348,13 @@ contains
 
         write(iu, '(A)', advance='no') "             "  
         do j = 1, fitter_instance%npars
-            write(iu, '(A11,6x)', advance='no') adjustl(trim(fitter_instance%plabels(j)))
+            write(iu, '(A11,6x)', advance='no') trim(fitter_instance%plabels(j))
         end do
         write(iu, '(/)')
 
         do i = 1, fitter_instance%npars
             
-            write(iu, '(A13)', advance='no') adjustl(trim(fitter_instance%plabels(i)))
+            write(iu, '(A13)', advance='no') trim(fitter_instance%plabels(i))
             do j = 1, fitter_instance%npars
                 if (j < i) then
                     write(iu, '(A17)', advance='no') " "  ! Blank lower triangle
@@ -451,8 +458,11 @@ contains
 
         close(iu)
 
-        write(*, '("Exported histogram and function values to ", A, " - to plot the results, use the following command:")')  trim(filename)
+        write(*, '("Exported histogram and function values to ", A)')  trim(filename)
+        write(*, '("Plotting the results.....")')
         write(*, '("  > python plot.py ", A )') trim(filename)
+        
+        call execute_command_line('python plot.py ' // trim(filename), wait=.true., exitstat=iu)
 
 end subroutine export_hist_and_fcn
 

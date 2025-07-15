@@ -13,6 +13,93 @@ module utils
 
     contains    
 
+        ! Function to convert a string to lowercase
+        pure function to_lower(str) result(lower)
+            use iso_fortran_env, only: output_unit
+
+            character(len=*), intent(in) :: str
+            character(len=len(str)) :: lower
+            integer :: i, c
+            
+
+            do i = 1, len(str)
+                c = ichar(str(i:i))
+                if (c >= ichar('A') .and. c <= ichar('Z')) then
+                    lower(i:i) = char(c + 32)
+                else
+                    lower(i:i) = str(i:i)
+                end if
+            end do
+
+        end function to_lower
+
+        ! Function to read 1,2,3 columns of numbers from a file
+        subroutine read_from_file(filename, n, xvals, yvals, yerrs)
+
+            character(len=*), intent(in) :: filename
+            integer, intent(out) :: n
+            real(dp), allocatable, intent(out) :: xvals(:)
+            real(dp), allocatable, intent(out), optional :: yvals(:), yerrs(:)
+
+            integer :: i, ios, iu = 11, line_count
+            character(len=256) :: msg
+            real(dp) :: dummy
+            logical :: exists
+
+            ! Open and count lines
+            inquire(file=filename, exist=exists)
+            if (.not. exists) then
+                write(*, '(/,A,A)') "Error: File '", trim(filename), "' does not exist."
+                stop
+            end if
+
+            open(newunit=iu, file=filename, status='old', action='read', iostat=ios, iomsg=msg)
+            if (ios /= 0) then
+                write(*, '(/,A,A)') "Error opening file: ", trim(msg)
+                stop
+            end if
+
+            line_count = 0
+            do
+                read(iu, *, iostat=ios) dummy
+                if (ios /= 0) exit
+                line_count = line_count + 1
+            end do
+            n = line_count
+
+            allocate(xvals(n))
+            if(present(yvals)) then
+                allocate(yvals(n))
+            end if
+            if(present(yerrs)) then
+                allocate(yerrs(n))
+            end if
+
+            rewind(iu)
+            do i = 1, n
+                if(present(yvals) .and. present(yerrs)) then
+                    read(iu, *, iostat=ios) xvals(i), yvals(i), yerrs(i)
+                else if(present(yvals)) then
+                    read(iu, *, iostat=ios) xvals(i), yvals(i)
+                else
+                    read(iu, *, iostat=ios) xvals(i)
+                end if
+
+
+
+
+                if (ios /= 0) then
+                    write(*, '("Read error at line ", I0)') i
+                    stop
+                end if
+            end do
+
+            close(iu)
+            write(*, '("Read ",I0, " data points from file " ,A)')  n, trim(filename)
+
+        end subroutine read_from_file
+
+
         ! Subroutine to append an element to an allocatable array
         
         subroutine append_element(array, value)
@@ -78,9 +165,14 @@ module utils
             ! LU decomposition
             call xgetrf(n, n, Ainv, n, ipiv, info) 
             if (info /= 0) then
-                print*, "################### Error in LU decomposition ###################"
-                print *, " LU decomposition failed. INFO =", info
-                print*, "#################################################################"
+                write(*,'(A)') "################### Error in LU decomposition ###################"
+                write(*, '( " LU decomposition failed. INFO = " , I0)') info
+                if(info < 0) then
+                   write(*, '( " The ", I0 , "th argument had an illegal value.")') -info
+                else if (info > 0) then
+                    write(*, '( "The factor U is exactly singular; the ", I0 , "th diagonal element is zero.")') info
+                end if
+                write(*,'(A)') "#################################################################"
                 stop
             end if
 
@@ -96,8 +188,13 @@ module utils
             call xgetri(n, Ainv, n, ipiv, work, lwork, info)
             if (info /= 0) then
                 print *, "################### Error in matrix inversion ###################"
-                print *, " Matrix inversion failed. INFO =", info
-                print *, "#################################################################"
+                write(*, '( " Matrix inversion failed. INFO = " , I0)') info
+                if(info < 0) then
+                   write(*, '( " The ", I0 , "th argument had an illegal value.")') -info
+                else if (info > 0) then
+                    write(*, '( "The factor U is exactly singular; the ", I0 , "th diagonal element is zero.")') info
+                end if
+                write(*,'(A)') "#################################################################"
                 stop
             end if
 

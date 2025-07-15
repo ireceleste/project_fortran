@@ -1,3 +1,8 @@
+!!!!!!!!!!!!!!!!!!!!!!!!! InputOutput.f08 !!!!!!!!!!!!!!!!!!!!!!!!!!
+! This module handles reading the input card, managing the fit parameters,
+! and initializing the Fitter object.
+! Called by the main program
+
 module InputOutput
 
     use utils
@@ -12,6 +17,7 @@ module InputOutput
     type CardData
 
         character(len=100) :: data_file, output_fit_summary, output_fit_results, verbose_log, save_gen_data, model
+        
         logical :: binned, input_data_flag, output_fit_summary_flag, output_fit_results_flag, verbose_flag, &
                     n_points_flag, save_gen_data_flag
 
@@ -23,6 +29,109 @@ module InputOutput
 
     contains
 
+        subroutine print_help_mode()
+            integer :: iu = 99
+            character(len=100) :: line
+            
+            write(*, '(/,A,/)') repeat('=', 90)
+            write(*, '(A)') "            GRADIENT DESCENT FITTER — HELP MODE"
+            write(*, '(/,A,/)') repeat('=', 90)
+
+            write(*, '(A)') "This program performs a numerical minimization of a fit function (chi2 or likelihood)"
+            write(*, '(A)') "using the Gradient Descent method. It can operate on user-provided data or generate"
+            write(*, '(A)') "synthetic datasets according to selected analytical models."
+            write(*, '(/,A)') "The program supports:"
+            write(*, '(A)') "  - Binned and unbinned fits"
+            write(*, '(A)') "  - Gaussian or Poisson likelihood"
+            write(*, '(A)') "  - Flexible model definitions (Gauss, Exp, Polynomial, etc.)"
+            write(*, '(A)') "  - Numerical estimation of gradients and Hessians"
+            write(*, '(A)') "  - Covariance matrix calculation using LAPACK (dgetrf, dgetri)"
+
+            write(*, '(/,A)') "======================= INPUT FORMAT ======================="
+            write(*, '(A)') "An input card must be provided as the first command-line argument:"
+            write(*, '(A)') "  > bin/main path/to/inputcard"
+            write(*, '(A)') "The input card is a two-column text file, with optionally a divider (, | ; :)"
+            write(*, '(A)') "  [key]    [value]"
+            write(*, '(A)') "Lines after the first empty line are ignored."
+            write(*, '(A)') "Lines starting with ! # / are ignored."
+
+            write(*, '(/,A)') "Input options:"
+            write(*, '(A)') "  likelihood              1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
+            write(*, '(A)') "  model                   Gauss, Exp, Linear, Quadratic"
+            write(*, '(A)') "  start_params            1.0 0.5 ! Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
+            write(*, '(A)') "  data_file               path/to/data.txt"
+            write(*, '(A)') "  n_points                10000 ! Max number of points to generate (if no data_file is provided)"
+            write(*, '(A)') "  output_fit_results      output/fit_results.txt"
+            write(*, '(A)') "  fit_summary_file        output/fit_summary.txt"
+            write(*, '(A)') "  verbose                 output/verbose:log.txt"
+
+            write(*, '(/,A)') "======================= OUTPUT ======================="
+            write(*, '(A)') "The program always prints to terminal:"
+            write(*, '(A)') "  - Initial parameters, final fit values"
+            write(*, '(A)') "  - Function value at minimum, number of degrees of freedom"
+            write(*, '(A)') "  - Gradient, parameter errors, covariance and correlation matrix"
+            write(*, '(A)') "Optional files to save the fit summary and results can be provided:"
+            write(*, '(A)') "  - Fit summary (txt)"
+            write(*, '(A)') "  - Fit results and input data for plotting (txt)"
+
+            write(*, '(/,A,/)') repeat('=', 90)
+
+            write(*, '(A)', advance='no') "Would you like to generate a template input card file (card.dat)? [y/n]: "
+            read(*, '(A)') line
+
+            if (trim(line) == 'y' .or. trim(line) == 'Y' .or. &
+                trim(line) == 'yes' .or. trim(line) == 'YES' .or. &
+                trim(line) == 'Yes') then
+
+
+                open(unit=iu, file='card.dat', status='replace', action='write')
+                write(iu,'(A)') "/"
+                write(iu,'(A)') "/"
+                write(iu,'(A)') "######## Template input card for the Gradient Descent Fitter ########"
+                write(iu,'(A)') "/"
+                write(iu,'(A)') "/"                    
+                write(iu,'(A)') "# likelihood: 1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
+                write(iu,'(A)') "# model: Gauss, Exp, Linear, Quadratic"
+                write(iu,'(A)') "# start_params: Initial parameters for the fit model (e.g., mean, stddev, slope, intercept)"
+                write(iu,'(A)') "# data_file: Path to the input data file (if not provided, synthetic data will be generated)"
+                write(iu,'(A)') "# n_points: Max number of points to generate (if no data_file is provided)"
+                write(iu,'(A)') "# max_iter: Maximum number of iterations for the gradient descent algorithm"
+                write(iu,'(A)') "# step: Step size for each parameter (default is 1.0e-6 for all parameters)"
+                write(iu,'(A)') "# output_fit_results: Path to save the fit results and input data for plotting"
+                write(iu,'(A)') "# fit_summary_file: Path to save the fit summary"
+                write(iu,'(A)') "# verbose: Path to save the verbose log with all the minimization steps"
+                write(iu,'(A)') "# save_gen_data: Path to save the generated data (if applicable)"
+                write(iu,'(A)') "/"
+                write(iu,'(A)') "/"
+
+                write(iu,'(A)') "likelihood          |      2  # Binned Poisson"
+                write(iu,'(A)') "model               |      Gauss"
+                write(iu,'(A)') "start_params        |      0.0 1.0"
+                write(iu,'(A)') "data_file           |      "
+                write(iu,'(A)') "n_points            |      "
+                write(iu,'(A)') "max_iter            |      50000"
+                write(iu,'(A)') "step                |      1.0e-6 1.0e-6 "
+                write(iu,'(A)') "output_fit_results  |      output/fit_results.txt"
+                write(iu,'(A)') "fit_summary_file    |      output/fit_summary.txt"
+                write(iu,'(A)') "verbose             |      output/verbose_log.txt"
+                write(iu,'(A)') "save_gen_data       |      output/save_gen_data.txt"
+
+                write(iu,'(A)') ""
+                close(iu)
+
+
+                write(*, '(/,A,/)') "Template input card written to 'card.dat'."
+                write(*, '(A)') "Now you can modify it according to your needs and run the program with:"
+                write(*, '(A)') "  > bin/main card.dat"
+            else
+                write(*, '(/,A,/)') "No file created. Proceed with your custom input card."
+            end if
+
+            stop
+
+        end subroutine print_help_mode
+
+
         function read_card() result(card)
 
             type(CardData) :: card
@@ -30,18 +139,20 @@ module InputOutput
             
             character(len=100) :: cardname
             character(len=256) :: line
-            character(len=32)  :: tokens(10)
+            character(len=32)  :: tokens(10), model_string
             integer :: num_tokens, i, pos1, pos2, len_line
             
-            integer :: iu = 10, ios, nargs
+            integer :: iu = 10, ios, nargs, comment_position, &
+                        comment_position1, comment_position2, comment_position3
             logical :: exists
             logical :: likeflg, modelflg, start_params_flag, step_flag
-
-
+            
+           
             card%max_iter = 50000
             likeflg = .false.
             modelflg = .false.
             start_params_flag = .false.
+            step_flag = .false.
 
             
             card%input_data_flag = .false. 
@@ -49,6 +160,7 @@ module InputOutput
             card%output_fit_results_flag = .false.
             card%verbose_flag = .false.
             card%n_points_flag = .false.
+            card%save_gen_data_flag = .false.
 
 
             ! Check if the input card is provided
@@ -70,102 +182,7 @@ module InputOutput
             call get_command_argument(1,cardname)
 
             if (trim(cardname) == '--help' .or. trim(cardname) == '-h') then
-
-                write(*, '(/,A,/)') repeat('=', 90)
-                write(*, '(A)') "            GRADIENT DESCENT FITTER — HELP MODE"
-                write(*, '(/,A,/)') repeat('=', 90)
-
-                write(*, '(A)') "This program performs a numerical minimization of a fit function (chi2 or likelihood)"
-                write(*, '(A)') "using the Gradient Descent method. It can operate on user-provided data or generate"
-                write(*, '(A)') "synthetic datasets according to selected analytical models."
-                write(*, '(/,A)') "The program supports:"
-                write(*, '(A)') "  - Binned and unbinned fits"
-                write(*, '(A)') "  - Gaussian or Poisson likelihood"
-                write(*, '(A)') "  - Flexible model definitions (Gauss, Exp, Polynomial, etc.)"
-                write(*, '(A)') "  - Numerical estimation of gradients and Hessians"
-                write(*, '(A)') "  - Covariance matrix calculation using LAPACK (dgetrf, dgetri)"
-
-                write(*, '(/,A)') "======================= INPUT FORMAT ======================="
-                write(*, '(A)') "An input card must be provided as the first command-line argument:"
-                write(*, '(A)') "  > bin/main path/to/inputcard"
-                write(*, '(A)') "The input card is a two-column text file, with optionally a divider (, | ;)"
-                write(*, '(A)') "  [key]    [value]"
-                write(*, '(A)') "Lines after the first empty line are ignored."
-                write(*, '(A)') "Lines starting with ! # / are ignored."
-
-                write(*, '(/,A)') "Input options:"
-                write(*, '(A)') "  likelihood              1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
-                write(*, '(A)') "  model                   Gauss, Exp, Linear, Quadratic"
-                write(*, '(A)') "  start_params            1.0 0.5 ! Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
-                write(*, '(A)') "  data_file               path/to/data.txt"
-                write(*, '(A)') "  n_points                10000 ! Max number of points to generate (if no data_file is provided)"
-                write(*, '(A)') "  output_fit_results      output/fit_results.txt"
-                write(*, '(A)') "  fit_summary_file        output/fit_summary.txt"
-                write(*, '(A)') "  verbose                 output/verbose:log.txt"
-
-                write(*, '(/,A)') "======================= OUTPUT ======================="
-                write(*, '(A)') "The program always prints to terminal:"
-                write(*, '(A)') "  - Initial parameters, final fit values"
-                write(*, '(A)') "  - Function value at minimum, number of degrees of freedom"
-                write(*, '(A)') "  - Gradient, parameter errors, covariance and correlation matrix"
-                write(*, '(A)') "Optional files to save the fit summary and results can be provided:"
-                write(*, '(A)') "  - Fit summary (txt)"
-                write(*, '(A)') "  - Fit results and input data for plotting (txt)"
-
-                write(*, '(/,A,/)') repeat('=', 90)
-
-                write(*, '(A)', advance='no') "Would you like to generate a template input card file (card.dat)? [y/n]: "
-                read(*, '(A)') line
-
-                if (trim(line) == 'y' .or. trim(line) == 'Y' .or. &
-                    trim(line) == 'yes' .or. trim(line) == 'YES' .or. &
-                    trim(line) == 'Yes') then
-
-
-                    open(unit=iu, file='card.dat', status='replace', action='write')
-                    write(iu,'(A)') "/"
-                    write(iu,'(A)') "/"
-                    write(iu,'(A)') "######## Template input card for the Gradient Descent Fitter ########"
-                    write(iu,'(A)') "/"
-                    write(iu,'(A)') "/"                    
-                    write(iu,'(A)') "# likelihood: 1 = unbinned (Gaussian), 2 = binned (Poisson), 3 = binned (Gaussian)"
-                    write(iu,'(A)') "# model: Gauss, Exp, Linear, Quadratic"
-                    write(iu,'(A)') "# start_params: Initial parameters for the fit model (e.g., mean, stddev, slope, intercept, yield (optional))"
-                    write(iu,'(A)') "# data_file: Path to the input data file (if not provided, synthetic data will be generated)"
-                    write(iu,'(A)') "# n_points: Max number of points to generate (if no data_file is provided). Overwrites the yield parameter if provided in start_params."
-                    write(iu,'(A)') "# max_iter: Maximum number of iterations for the gradient descent algorithm"
-                    write(iu,'(A)') "# step: Step size for each parameter (default is 1.0e-6 for all parameters)"
-                    write(iu,'(A)') "# output_fit_results: Path to save the fit results and input data for plotting"
-                    write(iu,'(A)') "# fit_summary_file: Path to save the fit summary"
-                    write(iu,'(A)') "# verbose: Path to save the verbose log with all the minimization steps"
-                    write(iu,'(A)') "# save_gen_data: Path to save the generated data (if applicable)"
-                    write(iu,'(A)') "/"
-                    write(iu,'(A)') "/"
-
-                    write(iu,'(A)') "likelihood          |      2"
-                    write(iu,'(A)') "model               |      Gauss"
-                    write(iu,'(A)') "start_params        |      0.0 1.0 10000"
-                    write(iu,'(A)') "data_file           |       "
-                    write(iu,'(A)') "n_points            |       "
-                    write(iu,'(A)') "max_iter            |      50000"
-                    write(iu,'(A)') "step                |      1.0e-6 1.0e-6 10"
-                    write(iu,'(A)') "output_fit_results  |      output/fit_results.txt"
-                    write(iu,'(A)') "fit_summary_file    |      output/fit_summary.txt"
-                    write(iu,'(A)') "verbose             |      output/verbose_log.txt"
-                    write(iu,'(A)') "save_gen_data       |      output/save_gen_data.txt"
-
-                    write(iu,'(A)') ""
-                    close(iu)
-
-
-                    write(*, '(/,A,/)') "Template input card written to 'card.dat'."
-                    write(*, '(A)') "Now you can modify it according to your needs and run the program with:"
-                    write(*, '(A)') "  > bin/main card.dat"
-                else
-                    write(*, '(/,A,/)') "No file created. Proceed with your custom input card."
-                end if
-
-                stop
+                call print_help_mode()
 
             else if (trim(cardname) == '--models' .or. trim(cardname) == '-m') then
                 write(*, '(/,A,/)') repeat('=', 90)
@@ -177,14 +194,11 @@ module InputOutput
                 write(*, '(A)') "  - Quadratic   (3 parameters: a, b, c)"
                 
 
-                write(*, '(/,A)') "Available models for BINNED fits (likelihood = 2 = Poisson, or 3 = Gaussian):"
+                write(*, '(/,A)') "Available models for BINNED fits (likelihood = 2 (Poisson), or 3  (Gaussian)):"
                 write(*, '(A)') "  - Gaussian    (2 parameters: mean, stddev)"
                 write(*, '(A)') "  - Exponential (1 parameter: lambda)"
-                write(*, '(A)') "     > These models support an optional 3rd parameter: yield"
-                write(*, '(A)') "       It can be used instead of the 'n_points' generation option."
-
-                write(*, '(A)') "     > Parameter order for Gaussian: [mean, stddev, yield (optional)]"
-                write(*, '(A)') "     > Parameter order for Exponential: [lambda, yield (optional)]"
+                write(*, '(A)') "     > These models have an additional fit parameter (yield), which is the total number of events in the dataset."
+                write(*, '(A)') "     > Its initial value, step size, and learning rate are set automatically based on the number of given events."
 
                 write(*, '(/,A,/)') repeat('=', 90)
 
@@ -237,13 +251,15 @@ module InputOutput
                     cycle
                 end if
 
+                
                 do while (pos1 <= len_line .and. num_tokens < 10)
 
                     do while (pos1 <= len_line .and. line(pos1:pos1) == ' ')
                         pos1 = pos1 + 1
                     end do
 
-                    if (pos1 > len_line) exit  ! Stop reading the file if the line is empty
+                    if (pos1 > len_line) exit  
+                    if(line(pos1:pos1) == '#' .or. line(pos1:pos1) == '!' .or. line(pos1:pos1) == '/') exit
 
                     ! Find next space 
                     pos2 = pos1
@@ -251,7 +267,9 @@ module InputOutput
                         pos2 = pos2 + 1
                     end do
 
-                    if(line(pos1:pos2-1) /= ',' .and. line(pos1:pos2-1) /= ';' .and. line(pos1:pos2-1) /= '|') then
+                    if(line(pos1:pos2-1) /= ',' .and. line(pos1:pos2-1) /= ';'&
+                        .and. line(pos1:pos2-1) /= '|' .and. line(pos1:pos2-1) /= ':' &
+                        .and. line(pos1:pos2-1) /= '=') then
                         num_tokens = num_tokens + 1
                         tokens(num_tokens) = line(pos1:pos2-1)
                     end if
@@ -260,7 +278,7 @@ module InputOutput
                 end do
 
 
-                if (num_tokens == 0) exit
+                if (num_tokens == 0) exit 
 
 
                 ! --- Process the key-value pairs from the input card ---
@@ -318,36 +336,36 @@ module InputOutput
                         stop
                     end if
 
-                    if (trim(tokens(2)) == 'Linear' .or. trim(tokens(2)) == 'linear' .or. &
-                        trim(tokens(2)) == 'poly1' .or. trim(tokens(2)) == 'LIN') then
+                    model_string = to_lower(trim(tokens(2)))
+
+                    select case (model_string)
+                    case ('linear', 'lin', 'poly1', 'line')
                         card%model = 'linear'
                         modelflg = .true.
-                    else if (trim(tokens(2)) == 'Quadratic' .or. trim(tokens(2)) == 'quadratic' .or. &
-                                trim(tokens(2)) == 'poly2' .or. trim(tokens(2)) == 'QUAD') then
+                    case ('quadratic', 'quad', 'poly2', 'parabola')
                         card%model = 'quadratic'
                         modelflg = .true.
-                    else if (trim(tokens(2)) == 'Gauss' .or. trim(tokens(2)) == 'gauss' .or. &
-                        trim(tokens(2)) == 'Gaussian' .or. trim(tokens(2)) == 'GAUSS') then
+                    case ('gauss', 'gaussian')
                         card%model = 'Gauss'
                         modelflg = .true.
-                    else if (trim(tokens(2)) == 'Expo' .or. trim(tokens(2)) == 'expo' .or. trim(tokens(2)) == 'exp' .or. &
-                             trim(tokens(2)) == 'Exponential' .or. trim(tokens(2)) == 'EXPO') then
+                    case ('expo', 'exp', 'exponential')
                         card%model = 'expo'
                         modelflg = .true.
-                    else
+                    case default
                         write(*, '(/,A)') "Input error: this model is not available."
                         write(*, '(A)')   "For more details on available models use:"
                         write(*, '(A)')   "  > bin/main -m  or  bin/main --models"
                         write(*, '(A,/)') "Aborting..."
                         stop
-                    end if
-                    
+                    end select
                 end if ! End key == 'model'
 
                 if(tokens(1) == 'start_params') then
 
                     if (num_tokens > 1) then
+                        if (allocated(card%x_start)) deallocate(card%x_start)
                         allocate(card%x_start(num_tokens - 1))
+
                         do i = 2, num_tokens
                             read(tokens(i), *, iostat=ios) card%x_start(i - 1)
                             if (ios /= 0) then
@@ -365,6 +383,7 @@ module InputOutput
                 if(tokens(1) == 'step') then
 
                     if (num_tokens > 1) then
+                        if (allocated(card%step)) deallocate(card%step)
                         allocate(card%step(num_tokens - 1))
                         do i = 2, num_tokens
                             read(tokens(i), *, iostat=ios) card%step(i - 1)
@@ -523,10 +542,10 @@ module InputOutput
 
             if(card%binned) then
                 if (card%model  == "Gauss") then
-                    card%Npars = 3
+                    card%Npars = 2
                    
                 else if (card%model  == "expo") then
-                    card%Npars = 2
+                    card%Npars = 1
                     
                 else
                     write(*, '(/,A)') "Input error: BINNED model not supported."
@@ -553,28 +572,15 @@ module InputOutput
         if(start_params_flag) then
 
             ! Stop if the number of start parameters does not match the expected number
-            if(.not.card%binned .and. size(card%x_start) /= card%Npars) then
+            if( size(card%x_start) /= card%Npars) then
                 write(*, '(/,A)') "Input error: number of start parameters does not match the expected number for unbinned fits."
                 write(*, '("Expected ", I0, " parameters but got ", I0)')  card%Npars, size(card%x_start)
                 stop
-            else if(card%binned .and. (size(card%x_start) /= card%Npars - 1 .and. size(card%x_start) /= card%Npars )) then
-                write(*, '(/,A)') "Input error: number of start parameters does not match the expected number for binned fit."
-                write(*, '("Expected ", I0, " parameters but got ", I0)')  card%Npars - 1, size(card%x_start)
-                stop
-            
             end if
             
         else
             write(*, '(/,A)') "No start parameters provided, using default values."
             
-            if(.not.card%n_points_flag) then
-                if(card%binned) then
-                    card%n_points = 10000  ! Default number of points for binned data generation
-                else
-                    card%n_points = 50  ! Default number of points for unbinned data generation
-                end if
-            end if
-
             allocate(card%x_start(card%Npars))
             
             select case (card%model)
@@ -597,47 +603,22 @@ module InputOutput
             
         end if
 
-        ! Set correct number of points for binned fits if not given in the input card
-
-        if(.not. card%n_points_flag ) then
-
+        if(.not.card%n_points_flag .and. .not. card%input_data_flag) then
             if(card%binned) then
-
-                if( .not. start_params_flag  ) then
-                    card%n_points = 10000  ! Default number of points for binned data generation
-                    card%x_start(card%Npars) = real(card%n_points, dp)  
-                
-                else if(size(card%x_start) == card%Npars - 1) then
-                    card %n_points = 10000  ! Default number of points for binned data generation
-                    call append_element(card%x_start, real(card%n_points, dp) )
-
-                else if(size(card%x_start) == card%Npars) then
-                    card%n_points = int(card%x_start(card%Npars))  ! Set n_points from the yield parameter
-                end if
-
+                card%n_points = 10000  ! Default number of points for binned data generation
             else
                 card%n_points = 50  ! Default number of points for unbinned data generation
             end if
-            
         end if
+
 
         ! Set the step if not provided in the input card
 
         if (.not. step_flag) then
-            allocate(card%step(card%Npars))
-            card%step = 1.0e-6_dp  ! Default step size for all parameters
-
-            select case (card%model)
-            case ("Gauss")  ! Gauss
-                card%step(3) = 10.0_dp  ! yield step to ensure better convergence
-            case ("expo")  ! Exponential
-                card%step(2) = 10.0_dp  ! yield step to ensure better convergence
-            case ("linear")  ! Linear
-                ! No specific step size needed for linear model
-            case ("quadratic")  ! Quadratic
-                card%step(1) = 1.0e-9_dp  ! a step to ensure better convergence
-            end select
             
+            allocate(card%step(card%Npars))
+            card%step = 1.0e-6_dp  
+
         end if
 
     
@@ -722,44 +703,41 @@ module InputOutput
         write(*, '(/,A,/)') repeat('=', 90)
 
 
-
     end function read_card
 
     
     function init_fitter_from_card(card) result(fitter_instance)
 
         type(CardData) :: card
-        type(Fitter) :: fitter_instance
+        type(Fitter) :: fitter_instance 
         
-        integer ::  n, i, ios, iu = 11, nbins_hist
+        integer ::  n, i, iu = 11, nbins_hist
         real(dp) :: rng, xmin, xmax
-        character(len=256) :: line
 
         real(dp), dimension(:), allocatable :: xvals, yvals, err_yvals
         real(dp), dimension(:), allocatable :: lrate
         character(len=100), dimension(:), allocatable :: param_names
         character(len=100) :: hist_name
         type(Histogram) :: hist
-        logical :: exists
-        real :: dummy
-
-        ! Set step, learning rate, and parameter names based on the FCN index
 
 
-        allocate(lrate(card%Npars), param_names(card%Npars))
         
         select case (card%model)
         case ("Gauss")  
+            allocate(param_names(3))
             param_names(1) = "mean"
             param_names(2) = "stddev"
             param_names(3) = "yield"
         case ("expo")
+            allocate(param_names(2))
             param_names(1) = "lambda"
             param_names(2) = "yield"
         case ("linear") 
+            allocate(param_names(2))
             param_names(1) = "slope"
             param_names(2) = "intercept"
         case ("quadratic")  
+            allocate(param_names(3))
             param_names(1) = "a"
             param_names(2) = "b"
             param_names(3) = "c"
@@ -768,6 +746,7 @@ module InputOutput
             stop
         end select
 
+        allocate(lrate(card%Npars))
         lrate = card%step  ! Use the step sizes as learning rates
 
 
@@ -775,51 +754,17 @@ module InputOutput
 
         if(card%binned) then
 
-            if(card%input_data_flag) then
-
-
-                inquire(file=card%data_file, exist=exists)
-                if (.not. exists) then
-                    write(*, '(/,A,A)') "Input error: data file '", trim(card%data_file), "' does not exist."
-                    stop
-                end if
-
-                open(newunit=iu, file=card%data_file, iostat = ios, iomsg=line, action='read', status='old')
-
-                if (ios /= 0) then
-                    write(*, '(/,A,A)') "Input error: cannot open data file '", trim(card%data_file), "'."
-                    stop
-                end if
-                
-               n = 0
-                do
-                    read(iu, *, iostat=ios) dummy
-                    if (ios /= 0) exit
-                    n = n + 1
-                end do
-
-                allocate(xvals(n))
-
-                rewind(iu)
-                do i = 1, n
-                    read(iu, *, iostat=ios) xvals(i)
-                    if (ios /= 0) then
-                        print *, "Read error at entry", i
-                        stop
-                    end if
-                end do
-                close(iu)
-
-
-                write(*, '("Read ",I0, " data points from file " ,A)')  n, trim(card%data_file)
+            if(card%input_data_flag) then ! Read data from file
                 hist_name = "Histogram of " // trim(card%data_file) // " data"
+                call read_from_file(card%data_file, n, xvals)
                 
-            else
-                n = card%n_points
-                allocate(xvals(n))
-                call generate_dataset_pdf(n, xvals, pdf = card%model, pars = card%x_start(1:card%Npars-1)) 
-
+            else ! Generate data
                 hist_name = "Histogram of generated " // trim(card%model) // " data"
+                n = card%n_points
+                write( *, '("Generating ", I0, " data points for binned fit with model ", A, /)')  n, trim(card%model)
+
+                allocate(xvals(n))
+                call generate_dataset_pdf(n, xvals, pdf = card%model, pars = card%x_start) 
 
                 if(card%save_gen_data_flag) then
                     
@@ -828,27 +773,32 @@ module InputOutput
                         write(iu, '(F10.3)') xvals(i)
                     end do
                     close(iu)
-                    write(*, '(A)') "Generated data saved to '", trim(card%save_gen_data), "'."
+                    write(*, '(A, A, A)') "Generated data saved to '", trim(card%save_gen_data), "'."
                 end if
-
 
             end if
 
-            card%x_start(card%Npars) = real(n, dp)  ! Update yield as the number of points to ensure convergence
+            ! Add yield parameter for binned fits
+            card%Npars = card%Npars + 1  
+            call append_element(card%x_start, real(n, dp) )  
+            call append_element(lrate, real(n, dp)*1.0e-3_dp)  
+            call append_element(card%step, real(n, dp)*1.0e-3_dp)  
 
+
+            
             if(card%model == "Gauss") then
                 xmin = card%x_start(1) - 3.0_dp * card%x_start(2)
                 xmax = card%x_start(1) + 3.0_dp * card%x_start(2)
             else if (card%model == "expo") then
                 xmin = 0.0_dp
-                xmax = 3.0_dp * card%x_start(1)
+                xmax = 5.0_dp / card%x_start(1)
+            else
+                xmin = 0.0_dp
+                xmax = 0.0_dp
             end if
 
-            nbins_hist = 50
-
-            if(card%n_points < 1000) then
-                nbins_hist = 10  
-            end if
+            nbins_hist = 2*(int(log(real(n,dp)) / log(2.0_dp)) + 1)
+            nbins_hist = max(nbins_hist, 5)
 
              
             hist = Histogram(nbins_hist, xmin, xmax,  hist_name)
@@ -862,42 +812,12 @@ module InputOutput
 
         
         else ! Unbinned fit
-            if(card%input_data_flag) then
-                inquire(file=card%data_file, exist=exists)
-                if (.not. exists) then
-                    write(*, '(/,A,A)') "Input error: data file '", trim(card%data_file), "' does not exist."
-                    stop
-                end if
+            if(card%input_data_flag) then ! Read data from file
 
-                open(newunit=iu, file=card%data_file, iostat = ios, iomsg=line, action='read', status='old')
-
-                if (ios /= 0) then
-                    write(*, '(/,A,A)') "Input error: cannot open data file '", trim(card%data_file), "'."
-                    stop
-                end if
+                call read_from_file(card%data_file, n, xvals, yvals, err_yvals)
                 
-                n = 0
-                do
-                    read(iu, *, iostat=ios) dummy
-                    if (ios /= 0) exit
-                    n = n + 1
-                end do
+            else  ! Generate data
 
-                allocate(xvals(n), yvals(n), err_yvals(n))
-
-                rewind(iu)
-                do i = 1, n
-                    read(iu, *, iostat=ios) xvals(i), yvals(i), err_yvals(i)
-                    if (ios /= 0) then
-                        print *, "Read error at entry", i
-                        stop
-                    end if
-                end do
-                close(iu)
-
-                write(*, '("Read ",I0, " data points from file " ,A)')  n, trim(card%data_file)
-                
-            else
                 n = card%n_points
                 allocate(xvals(n), yvals(n), err_yvals(n))
                 do i = 1, n
@@ -917,10 +837,10 @@ module InputOutput
                         write(iu, '(F10.3, F10.3, F10.3)') xvals(i), yvals(i), err_yvals(i)
                     end do
                     close(iu)
-                    write(*, '(A)') "Generated data saved to '", trim(card%save_gen_data), "'."
+                write(*, '(A, A, A)') "Generated data saved to '", trim(card%save_gen_data), "'."
                 end if
 
-            end if
+            end if 
 
             fitter_instance = init_Fitter(card%likelihood, card%model, card%Npars, &
                 card%x_start, param_names, &
