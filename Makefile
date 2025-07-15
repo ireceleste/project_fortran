@@ -1,5 +1,7 @@
 FC = gfortran
 FCFLAGS = -J./mod -I./mod 
+LDFLAGS = -llapack -lblas
+
 SRCDIR = ./src
 MODDIR = ./mod
 OBJDIR = ./obj
@@ -23,7 +25,7 @@ all: directories main
 # The main target compiles the main program and links it with the object files
 
 main: $(OBJS) $(SRCDIR)/main.f08
-	$(FC) $(FCFLAGS) -llapack -lblas -o $(BINDIR)/$@ $^	
+	$(FC) $(FCFLAGS) $(LDFLAGS) -o $(BINDIR)/$@ $^	
 
 $(OBJDIR)/%.o: $(SRCDIR)/modules/%.f08
 	$(FC) $(FCFLAGS) -c $< -o $@
@@ -42,7 +44,7 @@ $(MODDIR):
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
-${OUTDIR}:
+$(OUTDIR):
 	mkdir -p $(OUTDIR)
 
 # The clean target removes all compiled files and directories

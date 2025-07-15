@@ -1,3 +1,6 @@
+!!!!!!!!!!!!!!!!!!!!!!!!! HistogramHandler.f08 !!!!!!!!!!!!!!!!!!!!!!!!!!
+! This module handles histogram creation and manipulation
+
 module HistogramHandler
     use utils
 
@@ -36,13 +39,7 @@ module HistogramHandler
         function init_Histogram(nbins, bin_min, bin_max, label) result(histogram_instance)
             integer, intent(in) :: nbins
             real(dp), intent(in) :: bin_min, bin_max
-            real(dp), dimension(:), allocatable :: edges
-            real(dp), dimension(:), allocatable :: centers
-            
-            real(dp), dimension(:), allocatable :: counts
-            real(dp), dimension(:), allocatable :: errors
             character(len=*), intent(in), optional :: label
-
             integer :: i
 
             type(Histogram) :: histogram_instance
@@ -99,8 +96,7 @@ module HistogramHandler
                         if (xvals(i) >= bin_min .and. xvals(i) < bin_max) then
                             this%bin_counts(ibin) = this%bin_counts(ibin) + 1
                             this%nentries = this%nentries + 1
-                            !  print *, "Found xvals point:", xvals(i), "in bin:", ibin, "with edges [", bin_min, ",", bin_max, "]"
-                            cycle
+                            exit
                         end if
                     end do
                 end if
