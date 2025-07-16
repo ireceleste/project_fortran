@@ -463,6 +463,7 @@ contains
         write(*, '("  > python plot.py ", A )') trim(filename)
         
         call execute_command_line('python plot.py ' // trim(filename), wait=.true., exitstat=iu)
+        if (iu /= 0) write( *, '("Python plotting script failed with exit code " , I0)') iu
 
 end subroutine export_hist_and_fcn
 
